@@ -27,6 +27,7 @@ This repository is a complete design package (docs only) to implement ShotRouter
 - docs/roadmap/ROADMAP.md — phases and milestones
 - docs/todo/TODO.md — concrete task list
 - docs/conventions/NAMING.md — filename and directory conventions
+ - docs/brand/BRANDING.md — palettes, tokens, theme files (web/Textual)
 
 ## TL;DR (How it feels)
 

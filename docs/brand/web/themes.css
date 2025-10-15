@@ -1,0 +1,46 @@
+/* ShotRouter Web UI themes (CSS variables) */
+
+:root {
+  --sr-gap-1: 4px;
+  --sr-gap-2: 8px;
+  --sr-gap-3: 12px;
+  --sr-radius: 6px;
+}
+
+/* Ledger */
+html[data-theme='ledger'] {
+  --sr-bg: #1E2A3A;
+  --sr-text: #E0E0E0;
+  --sr-primary: #0D639C;
+  --sr-success: #2E8540;
+  --sr-accent: #B8860B;
+  --sr-error: #C70039;
+}
+
+/* Analyst */
+html[data-theme='analyst'] {
+  --sr-bg: #282C34;
+  --sr-text: #F8F8F2;
+  --sr-primary: #00A6A6;
+  --sr-accent: #9B59B6;
+  --sr-highlight: #F1C40F;
+  --sr-error: #E67E22;
+}
+
+/* Seminar */
+html[data-theme='seminar'] {
+  --sr-bg: #3C3C3C;
+  --sr-text: #F3F3F3;
+  --sr-primary: #6A829B;
+  --sr-accent: #D4AC87;
+  --sr-error: #900C3F;
+}
+
+/* Base usage */
+body { background: var(--sr-bg); color: var(--sr-text); }
+.sr-header { background: var(--sr-primary); color: var(--sr-text); }
+.sr-btn     { border-radius: var(--sr-radius); padding: var(--sr-gap-2) var(--sr-gap-3); }
+.sr-btn--primary { background: var(--sr-primary); color: var(--sr-text); }
+.sr-btn--accent  { background: var(--sr-accent); color: var(--sr-bg); }
+.sr-badge--error { background: var(--sr-error); color: var(--sr-text); }
+

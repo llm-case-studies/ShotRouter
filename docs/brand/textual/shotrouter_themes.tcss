@@ -1,0 +1,53 @@
+/* ShotRouter Textual themes (.tcss) */
+
+/* --- Theme 1: The Actuary's Ledger --- */
+.theme-ledger {
+    $background: #1E2A3A;
+    $text: #E0E0E0;
+    $primary: #0D639C;
+    $success: #2E8540;
+    $accent: #B8860B;
+    $error: #C70039;
+}
+
+/* --- Theme 2: Modern Analyst --- */
+.theme-analyst {
+    $background: #282C34;
+    $text: #F8F8F2;
+    $primary: #00A6A6;
+    $secondary: #9B59B6;
+    $highlight: #F1C40F;
+    $error: #E67E22;
+}
+
+/* --- Theme 3: Seminar Slate --- */
+.theme-seminar {
+    $background: #3C3C3C;
+    $text: #F3F3F3;
+    $primary: #6A829B;
+    $focus: #D4AC87;
+    $error: #900C3F;
+}
+
+/* --- Apply variables to common widgets --- */
+Screen {
+    background: $background;
+    color: $text;
+}
+
+Header {
+    background: $primary;
+    color: $text;
+}
+
+Button {
+    background: $primary;
+    color: $text;
+    border: round $primary;
+}
+
+.btn-primary { background: $primary; color: $text; }
+.btn-success { background: $success; color: $background; }
+.btn-accent  { background: $accent; color: $background; }
+.text-error  { color: $error; }
+
