@@ -16,7 +16,12 @@ def create_app() -> FastAPI:
     # Initialize database (default to in-memory unless SHOTROUTER_DB is set)
     db.init(os.environ.get("SHOTROUTER_DB"))
 
-    app = FastAPI(title="ShotRouter", docs_url="/api/docs", openapi_url="/api/openapi.json")
+    app = FastAPI(
+        title="ShotRouter",
+        docs_url="/api/docs",           # Swagger UI
+        redoc_url="/api/redoc",         # ReDoc UI
+        openapi_url="/api/openapi.json" # OpenAPI schema
+    )
 
     app.add_middleware(
         CORSMiddleware,
