@@ -6,7 +6,12 @@ from .state import get_app_state
 
 
 def broadcast(event: str, payload: Dict[str, Any]) -> None:
-    # fire-and-forget send on all active websocket subscribers
+    """Send an event to all WebSocket subscribers.
+
+    Works in two contexts:
+    - Within an active event loop (normal server runtime): schedules a task.
+    - Without a running loop (tests/threadpool): executes synchronously.
+    """
     st = get_app_state()
     data = json.dumps({"event": event, "data": payload})
 
@@ -15,11 +20,19 @@ def broadcast(event: str, payload: Dict[str, Any]) -> None:
             try:
                 await ws.send_text(data)
             except Exception:
-                # drop broken connections silently
                 try:
                     st.subscribers.remove(ws)
                 except ValueError:
                     pass
 
-    asyncio.create_task(_send_all())
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_send_all())
+    except RuntimeError:
+        # No running loop (e.g., FastAPI TestClient in threadpool). Execute inline.
+        try:
+            import anyio
 
+            anyio.from_thread.run(_send_all)
+        except Exception:
+            asyncio.run(_send_all())
