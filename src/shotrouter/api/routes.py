@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -6,6 +7,8 @@ from pydantic import BaseModel
 from ..state import get_app_state
 from ..events import broadcast
 from ..sources import registry as source_registry, Source
+from ..config import get_default_source_candidates
+from ..watcher import manager as watch_manager
 from .. import db
 
 
@@ -103,7 +106,12 @@ def list_sources() -> Dict[str, Any]:
 
 @router.post("/sources")
 def add_source(body: SourceBody) -> Dict[str, Any]:
-    source_registry.add(Source(path=body.path, enabled=body.enabled, debounce_ms=body.debounce_ms))
+    p = Path(body.path).expanduser()
+    if not p.exists():
+        raise HTTPException(status_code=400, detail="path does not exist")
+    source_registry.add(Source(path=str(p), enabled=body.enabled, debounce_ms=body.debounce_ms))
+    if body.enabled:
+        watch_manager.start_for(p, debounce_ms=body.debounce_ms)
     return {"status": "ok"}
 
 
@@ -112,7 +120,16 @@ def remove_source(path: str) -> Dict[str, Any]:
     ok = source_registry.remove(path)
     if not ok:
         raise HTTPException(status_code=404, detail="not found")
+    try:
+        watch_manager.stop_for(Path(path))
+    except Exception:
+        pass
     return {"status": "ok"}
+
+
+@router.get("/sources/candidates")
+def source_candidates() -> Dict[str, Any]:
+    return {"items": [str(p) for p in get_default_source_candidates()]}
 
 
 # Compliance stubs

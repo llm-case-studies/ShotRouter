@@ -8,6 +8,8 @@ import uvicorn
 from .state import get_app_state
 from .api import routes, ws
 from . import db
+from .config import load_config, get_default_source_candidates
+from .watcher import manager as watch_manager
 
 
 def create_app() -> FastAPI:
@@ -40,4 +42,18 @@ def run_server(host: str = "127.0.0.1", port: int = 8767) -> None:
         state_dir.mkdir(parents=True, exist_ok=True)
         os.environ["SHOTROUTER_DB"] = str(state_dir / "shotrouter.db")
     app = create_app()
+    # Start watchers for configured and candidate sources (existing paths only)
+    try:
+        cfg = load_config()
+        for src in cfg.sources:
+            p = Path(src.path).expanduser()
+            if src.enabled and p.exists():
+                watch_manager.start_for(p, debounce_ms=src.debounce_ms or cfg.debounce_ms)
+        # If none configured, auto-start on common candidates
+        if not cfg.sources:
+            for p in get_default_source_candidates():
+                watch_manager.start_for(p, debounce_ms=cfg.debounce_ms)
+    except Exception:
+        import logging
+        logging.getLogger("shotrouter").exception("Failed to start watchers")
     uvicorn.run(app, host=host, port=port, log_level="info")
