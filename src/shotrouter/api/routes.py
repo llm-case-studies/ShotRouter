@@ -132,6 +132,15 @@ def source_candidates() -> Dict[str, Any]:
     return {"items": [str(p) for p in get_default_source_candidates()]}
 
 
+@router.get("/status")
+def status() -> Dict[str, Any]:
+    watchers = watch_manager.list_active()
+    return {
+        "watching_count": sum(1 for w in watchers if w.get("running")),
+        "watchers": watchers,
+    }
+
+
 # Compliance stubs
 @router.get("/scans")
 def list_scans(status: Optional[str] = None, limit: int = 50, offset: int = 0) -> Dict[str, Any]:

@@ -41,6 +41,16 @@
     renderList(document.getElementById('routed'), routed.items);
   }
 
+  async function refreshStatus() {
+    try {
+      const st = await api('/status');
+      const el = document.getElementById('status');
+      el.textContent = `Watching ${st.watching_count} source${st.watching_count === 1 ? '' : 's'}`;
+    } catch {
+      // ignore
+    }
+  }
+
   async function init() {
     const theme = localStorage.getItem('sr.theme') || 'ledger';
     setTheme(theme);
@@ -62,8 +72,9 @@
       try { const evt = JSON.parse(ev.data); if (evt.event && evt.event.startsWith('screenshot.')) refresh(); } catch {}
     };
     await refresh();
+    await refreshStatus();
+    setInterval(refreshStatus, 5000);
   }
 
   init();
 })();
-

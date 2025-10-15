@@ -113,5 +113,15 @@ class WatchManager:
             wt.stop()
         self._watchers.clear()
 
+    def list_active(self):
+        items = []
+        for key, wt in self._watchers.items():
+            items.append({
+                "path": key,
+                "debounce_ms": wt.debounce_ms,
+                "running": bool(wt.thread and wt.thread.is_alive()),
+            })
+        return items
+
 
 manager = WatchManager()
