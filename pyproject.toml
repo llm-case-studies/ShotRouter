@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shotrouter"
+version = "0.1.0"
+description = "System-wide screenshot router with UI-first design, compliance analyzers, and policy gates."
+requires-python = ">=3.11"
+authors = [{ name = "ShotRouter Team" }]
+readme = "README.md"
+dependencies = [
+  "fastapi>=0.115.0",
+  "uvicorn[standard]>=0.30.0",
+  "pydantic>=2.6.0",
+]
+
+[project.scripts]
+shotrouterd = "shotrouter.__main__:main"
+shotrouter = "shotrouter.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+shotrouter = [
+  "ui_static/*",
+  "ui_static/assets/*",
+]
+

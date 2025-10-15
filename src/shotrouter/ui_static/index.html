@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-theme="ledger">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ShotRouter</title>
+    <link rel="stylesheet" href="/assets/themes.css" />
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header class="sr-header">
+      <div>ShotRouter</div>
+      <div class="sr-actions">
+        <select id="theme">
+          <option value="ledger">Ledger</option>
+          <option value="analyst">Analyst</option>
+          <option value="seminar">Seminar</option>
+        </select>
+        <button id="arm" class="sr-btn sr-btn--accent">Arm Next</button>
+      </div>
+    </header>
+    <main class="sr-main">
+      <section>
+        <h2>Inbox</h2>
+        <div id="inbox"></div>
+      </section>
+      <section>
+        <h2>Routed</h2>
+        <div id="routed"></div>
+      </section>
+    </main>
+    <footer class="sr-footer">Local UI • 127.0.0.1</footer>
+    <script src="/assets/app.js"></script>
+  </body>
+  </html>
+
