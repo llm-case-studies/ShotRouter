@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from ..state import get_app_state
 from ..events import broadcast
+from ..sources import registry as source_registry, Source
 
 
 router = APIRouter()
@@ -92,6 +93,7 @@ def get_settings() -> Dict[str, Any]:
     return {
         "api": {"host": "127.0.0.1", "port": 8767},
         "armed": {"repo_path": st.armed_repo_path, "target_dir": st.armed_target_dir},
+        "sources": [s.path for s in source_registry.list()],
     }
 
 
@@ -99,6 +101,32 @@ def get_settings() -> Dict[str, Any]:
 def set_settings(body: SettingsBody) -> Dict[str, Any]:
     # Placeholder: accept and echo; real impl would persist
     return {"status": "ok", "updated": body.model_dump(exclude_none=True)}
+
+
+# Sources API (in-memory)
+class SourceBody(BaseModel):
+    path: str
+    enabled: bool = True
+    debounce_ms: int = 400
+
+
+@router.get("/sources")
+def list_sources() -> Dict[str, Any]:
+    return {"items": [s.__dict__ for s in source_registry.list()]}
+
+
+@router.post("/sources")
+def add_source(body: SourceBody) -> Dict[str, Any]:
+    source_registry.add(Source(path=body.path, enabled=body.enabled, debounce_ms=body.debounce_ms))
+    return {"status": "ok"}
+
+
+@router.delete("/sources")
+def remove_source(path: str) -> Dict[str, Any]:
+    ok = source_registry.remove(path)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
 
 
 # Compliance stubs
@@ -151,4 +179,3 @@ def simulate_new(body: SimNewBody) -> Dict[str, Any]:
     sc = st.new_screenshot(body.source_path, body.size)
     broadcast("screenshot.new", {"id": sc.id, "source_path": sc.source_path, "size": sc.size})
     return {"id": sc.id}
-
