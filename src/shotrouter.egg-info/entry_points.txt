@@ -1,3 +1,0 @@
-[console_scripts]
-shotrouter = shotrouter.cli:main
-shotrouterd = shotrouter.__main__:main
