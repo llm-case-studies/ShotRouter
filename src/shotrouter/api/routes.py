@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ..state import get_app_state
 from ..events import broadcast
 from ..sources import registry as source_registry, Source
+from .. import db
 
 
 router = APIRouter()
@@ -33,21 +34,8 @@ class RouteBody(BaseModel):
 
 @router.get("/screenshots")
 def list_screenshots(status: Optional[str] = Query(None), limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-    st = get_app_state()
-    items = st.list_screenshots(status=status, limit=limit, offset=offset)
-    return {
-        "items": [
-            {
-                "id": s.id,
-                "status": s.status,
-                "source_path": s.source_path,
-                "dest_path": s.dest_path,
-                "size": s.size,
-                "created_at": s.created_at,
-            }
-            for s in items
-        ]
-    }
+    items = db.get().list_screenshots(status=status, limit=limit, offset=offset)
+    return {"items": items}
 
 
 @router.post("/route")
@@ -60,21 +48,19 @@ def route_items(body: RouteBody) -> Dict[str, Any]:
 
     routed = []
     for sid in body.ids:
-        s = st.screenshots.get(sid)
+        s = db.get().get(sid)
         if not s:
             continue
-        s.status = "routed"
-        s.dest_path = f"{repo.rstrip('/')}/{target_dir.strip('/')}/example-{s.id}.png"
-        routed.append({"id": s.id, "dest_path": s.dest_path})
-        broadcast("screenshot.routed", {"id": s.id, "dest_path": s.dest_path})
+        dest_path = f"{repo.rstrip('/')}/{target_dir.strip('/')}/example-{sid}.png"
+        if db.get().route(sid, dest_path):
+            routed.append({"id": sid, "dest_path": dest_path})
+            broadcast("screenshot.routed", {"id": sid, "dest_path": dest_path})
     return {"routed": routed}
 
 
 @router.delete("/screenshots/{sid}")
 def delete_item(sid: str, with_file: bool = False) -> Dict[str, Any]:
-    st = get_app_state()
-    if sid in st.screenshots:
-        del st.screenshots[sid]
+    if db.get().delete(sid):
         broadcast("screenshot.deleted", {"id": sid})
         return {"deleted": sid}
     raise HTTPException(status_code=404, detail="not found")
@@ -158,11 +144,8 @@ class QuarantineBody(BaseModel):
 
 @router.post("/quarantine")
 def quarantine_item(body: QuarantineBody) -> Dict[str, Any]:
-    st = get_app_state()
-    s = st.screenshots.get(body.id)
-    if s:
-        s.status = "quarantined"
-        broadcast("screenshot.quarantined", {"id": s.id})
+    if db.get().quarantine(body.id):
+        broadcast("screenshot.quarantined", {"id": body.id})
         return {"status": "quarantined", "id": body.id}
     raise HTTPException(status_code=404, detail="not found")
 
@@ -175,7 +158,6 @@ class SimNewBody(BaseModel):
 
 @router.post("/dev/simulate_new")
 def simulate_new(body: SimNewBody) -> Dict[str, Any]:
-    st = get_app_state()
-    sc = st.new_screenshot(body.source_path, body.size)
-    broadcast("screenshot.new", {"id": sc.id, "source_path": sc.source_path, "size": sc.size})
-    return {"id": sc.id}
+    rec = db.get().add_screenshot(body.source_path, body.size)
+    broadcast("screenshot.new", {"id": rec["id"], "source_path": rec["source_path"], "size": rec["size"]})
+    return {"id": rec["id"]}

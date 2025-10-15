@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -5,9 +7,13 @@ import uvicorn
 
 from .state import get_app_state
 from .api import routes, ws
+from . import db
 
 
 def create_app() -> FastAPI:
+    # Initialize database (default to in-memory unless SHOTROUTER_DB is set)
+    db.init(os.environ.get("SHOTROUTER_DB"))
+
     app = FastAPI(title="ShotRouter", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
     app.add_middleware(
@@ -28,6 +34,10 @@ def create_app() -> FastAPI:
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8767) -> None:
+    # Set a durable default DB path if not defined
+    if not os.environ.get("SHOTROUTER_DB"):
+        state_dir = Path.home() / ".local" / "state" / "shotrouter"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["SHOTROUTER_DB"] = str(state_dir / "shotrouter.db")
     app = create_app()
     uvicorn.run(app, host=host, port=port, log_level="info")
-
