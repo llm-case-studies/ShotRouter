@@ -17,4 +17,7 @@ Thumbs.db
 
 # Local screenshots folder
 ScreenShots/
-tests/Test-Shots/
+
+# Test destination directory: keep folder in repo but ignore its contents
+tests/Test-Shots/*
+!tests/Test-Shots/.gitkeep
