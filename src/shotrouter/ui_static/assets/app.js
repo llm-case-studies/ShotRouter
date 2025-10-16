@@ -102,12 +102,6 @@
     setTheme(theme);
     document.getElementById('theme').value = theme;
     document.getElementById('theme').addEventListener('change', (e) => setTheme(e.target.value));
-    const armBtn = document.getElementById('arm');
-    if (armBtn) armBtn.textContent = 'Route Next';
-    document.getElementById('arm').addEventListener('click', async () => {
-      const repo = prompt('Repo path to arm?', '.');
-      if (repo) await api('/arm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repo_path: repo, target_dir: 'assets/images' }) });
-    });
     // Dev: simulate new items while we lack a watcher
     window.addEventListener('keydown', async (e) => {
       if (e.key === 'n' && e.ctrlKey) {
@@ -149,7 +143,7 @@
 
     // Sources
     const secS = document.createElement('div'); secS.className = 'tree-section';
-    const titleS = document.createElement('div'); titleS.className = 'tree-title'; titleS.textContent = 'Sources';
+    const titleS = document.createElement('div'); titleS.className = 'tree-title'; titleS.textContent = `Sources (${state.sources.length})`;
     const addWrap = document.createElement('div'); addWrap.style.margin = '8px 0';
     const input = document.createElement('input'); input.placeholder = 'Add source path…'; input.style.width='100%';
     input.onkeydown = async (e) => {
