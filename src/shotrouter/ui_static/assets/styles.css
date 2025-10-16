@@ -3,9 +3,24 @@ body { margin: 0; }
 .sr-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
 .sr-actions { display: flex; gap: 8px; align-items: center; }
 .sr-btn { border: 0; cursor: pointer; }
-.sr-main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
-section { background: rgba(0,0,0,0.1); padding: 12px; border-radius: 6px; }
+.sr-shell { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 84px); }
+.sr-sidebar { padding: 12px; border-right: 1px solid rgba(255,255,255,0.1); }
+.sr-content { padding: 16px; }
+.sr-panel { background: rgba(0,0,0,0.1); padding: 12px; border-radius: 6px; }
 .sr-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sr-item-actions { display: flex; gap: 6px; }
 .sr-footer { padding: 8px 12px; opacity: 0.8; }
+.sr-empty { opacity: 0.8; padding: 24px; }
 
+/* Sidebar tree */
+.tree { list-style: none; padding-left: 0; margin: 0; }
+.tree-section { margin-bottom: 16px; }
+.tree-title { font-weight: 600; margin-bottom: 6px; opacity: 0.9; }
+.tree-item { display: block; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.tree-item:hover { background: rgba(255,255,255,0.06); }
+.tree-item.active { background: rgba(255,255,255,0.12); }
+
+/* Tables */
+.sr-table { width: 100%; border-collapse: collapse; }
+.sr-table th, .sr-table td { text-align: left; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+.sr-table th { opacity: 0.9; }
