@@ -3,8 +3,10 @@ body { margin: 0; }
 .sr-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
 .sr-actions { display: flex; gap: 8px; align-items: center; }
 .sr-btn { border: 0; cursor: pointer; }
-.sr-shell { display: grid; grid-template-columns: 260px 1fr; gap: 0; min-height: calc(100vh - 84px); }
+.sr-shell { display: grid; grid-template-columns: var(--sr-sidebar-width, 260px) 5px 1fr; gap: 0; min-height: calc(100vh - 84px); }
 .sr-sidebar { padding: 12px; border-right: 1px solid rgba(255,255,255,0.1); }
+.sr-resizer { cursor: col-resize; background: rgba(255,255,255,0.08); }
+.sr-resizer:hover { background: rgba(255,255,255,0.15); }
 .sr-content { padding: 16px; }
 .sr-panel { background: rgba(0,0,0,0.1); padding: 12px; border-radius: 6px; }
 .sr-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }

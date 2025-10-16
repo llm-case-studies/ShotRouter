@@ -24,7 +24,16 @@
         routeBtn.className = 'sr-btn sr-btn--primary';
         routeBtn.textContent = 'Route';
         routeBtn.onclick = async () => {
-          await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id] }) });
+          // If nothing armed, prompt for repo path and send with body
+          let armed = null;
+          try { armed = (await api('/settings')).armed || null; } catch {}
+          if (!armed || !armed.repo_path) {
+            const repo = prompt('Route to repo path?', '.');
+            if (!repo) return;
+            await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id], repo_path: repo, target_dir: 'assets/images' }) });
+          } else {
+            await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id] }) });
+          }
           await refresh();
         };
         const qBtn = document.createElement('button');
@@ -93,6 +102,8 @@
     setTheme(theme);
     document.getElementById('theme').value = theme;
     document.getElementById('theme').addEventListener('change', (e) => setTheme(e.target.value));
+    const armBtn = document.getElementById('arm');
+    if (armBtn) armBtn.textContent = 'Route Next';
     document.getElementById('arm').addEventListener('click', async () => {
       const repo = prompt('Repo path to arm?', '.');
       if (repo) await api('/arm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ repo_path: repo, target_dir: 'assets/images' }) });
@@ -171,6 +182,38 @@
     loadSidebar();
     refresh();
   }
+
+  // Resizable sidebar
+  (function setupResizer() {
+    const resizer = document.getElementById('resizer');
+    if (!resizer) return;
+    let startX = 0; let startWidth = 260; let dragging = false;
+    const onMove = (e) => {
+      if (!dragging) return;
+      const dx = e.clientX - startX;
+      const w = Math.min(480, Math.max(200, startWidth + dx));
+      document.documentElement.style.setProperty('--sr-sidebar-width', w + 'px');
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const w = getComputedStyle(document.documentElement).getPropertyValue('--sr-sidebar-width');
+      try { localStorage.setItem('sr.sidebar.width', w.trim()); } catch {}
+    };
+    resizer.addEventListener('mousedown', (e) => {
+      dragging = true;
+      startX = e.clientX;
+      const cur = getComputedStyle(document.documentElement).getPropertyValue('--sr-sidebar-width');
+      startWidth = parseInt(cur || '260', 10) || 260;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    // restore
+    const saved = localStorage.getItem('sr.sidebar.width');
+    if (saved) document.documentElement.style.setProperty('--sr-sidebar-width', saved);
+  })();
 
   init();
 })();
