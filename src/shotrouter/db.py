@@ -139,6 +139,10 @@ class Database:
         cur = self._exec("DELETE FROM destination WHERE path=?", (path,))
         return cur.rowcount > 0
 
+    def get_destination(self, path: str) -> Optional[Dict[str, Any]]:
+        rows = self._query("SELECT id, path, target_dir, name, icon, name_format FROM destination WHERE path=?", (path,))
+        return dict(rows[0]) if rows else None
+
     # Routes
     def add_route(self, source_path: str, dest_path: str, priority: int = 1, active: bool = True) -> Dict[str, Any]:
         rid = f"rt_{uuid.uuid4().hex[:8]}"

@@ -10,6 +10,7 @@ from ..sources import registry as source_registry, Source
 from ..config import get_default_source_candidates
 from ..watcher import manager as watch_manager
 from .. import db
+from ..routing import route_to
 
 
 router = APIRouter()
@@ -54,10 +55,9 @@ def route_items(body: RouteBody) -> Dict[str, Any]:
         s = db.get().get(sid)
         if not s:
             continue
-        dest_path = f"{repo.rstrip('/')}/{target_dir.strip('/')}/example-{sid}.png"
-        if db.get().route(sid, dest_path):
-            routed.append({"id": sid, "dest_path": dest_path})
-            broadcast("screenshot.routed", {"id": sid, "dest_path": dest_path})
+        final = route_to(sid, dest_root=repo, target_dir=target_dir)
+        if final:
+            routed.append({"id": sid, "dest_path": final})
     return {"routed": routed}
 
 

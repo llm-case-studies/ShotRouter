@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 from .events import broadcast
 from . import db
+from .routing import route_via_route_record
 
 log = logging.getLogger("shotrouter.watcher")
 
@@ -81,6 +82,14 @@ class WatcherThread:
                     claimed = _claim_file(f) or f
                     rec = db.get().add_screenshot(str(claimed), claimed.stat().st_size)
                     broadcast("screenshot.new", {"id": rec["id"], "source_path": rec["source_path"], "size": rec["size"]})
+                    # Auto-route if a route is configured for this source directory
+                    try:
+                        final = route_via_route_record(rec["id"], source_dir=str(self.path))
+                        # route_via_route_record broadcasts routed event on success
+                        if final:
+                            pass
+                    except Exception:
+                        log.exception("Auto-route failed for %s", rec["id"])  # pragma: no cover
         except Exception as e:  # pragma: no cover - background thread
             log.exception("Watcher error on %s: %s", self.path, e)
 
