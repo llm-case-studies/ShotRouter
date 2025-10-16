@@ -56,6 +56,5 @@ def route_via_route_record(sid: str, source_dir: str) -> Optional[str]:
     if not routes:
         return None
     r0 = routes[0]
-    dst = db.get().get_destination(r0["dest_path"]) or {"path": r0["dest_path"], "target_dir": "assets/images"}
+    dst = db.get().get_destination(r0["dest_path"]) or {"path": r0["dest_path"], "target_dir": ""}
     return route_to(sid, dest_root=dst["path"], target_dir=dst.get("target_dir") or "")
-

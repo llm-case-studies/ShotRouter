@@ -11,6 +11,8 @@ body { margin: 0; }
 .sr-panel { background: rgba(0,0,0,0.1); padding: 12px; border-radius: 6px; }
 .sr-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sr-item-actions { display: flex; gap: 6px; }
+.sr-preview { margin-top: 8px; }
+.sr-preview img { max-width: 100%; height: auto; display: block; border-radius: 4px; }
 .sr-footer { padding: 8px 12px; opacity: 0.8; }
 .sr-empty { opacity: 0.8; padding: 24px; }
 

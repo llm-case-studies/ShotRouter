@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ..state import get_app_state
@@ -150,7 +151,7 @@ def status() -> Dict[str, Any]:
 # Destinations
 class DestinationBody(BaseModel):
     path: str
-    target_dir: str = "assets/images"
+    target_dir: str = ""
     name: Optional[str] = None
     icon: Optional[str] = None
     name_format: Optional[str] = None
@@ -188,8 +189,10 @@ class RouteAddBody(BaseModel):
 
 
 @router.get("/routes")
-def list_routes(source_path: Optional[str] = None) -> Dict[str, Any]:
+def list_routes(source_path: Optional[str] = None, dest_path: Optional[str] = None) -> Dict[str, Any]:
     routes = db.get().list_routes(source_path=source_path)
+    if dest_path:
+        routes = [r for r in routes if r.get("dest_path") == dest_path]
     # Attach minimal destination info
     dsts = {d["path"]: d for d in db.get().list_destinations()}
     out = []
@@ -201,8 +204,25 @@ def list_routes(source_path: Optional[str] = None) -> Dict[str, Any]:
 
 @router.post("/routes")
 def add_route(body: RouteAddBody) -> Dict[str, Any]:
+    # Ensure destination exists in DB for UI discoverability
+    if not db.get().get_destination(body.dest_path):
+        db.get().add_destination(path=body.dest_path, target_dir="")
     rec = db.get().add_route(source_path=body.source_path, dest_path=body.dest_path, priority=body.priority, active=body.active)
     return {"route": rec}
+
+
+@router.get("/files/{sid}")
+def get_file(sid: str) -> FileResponse:
+    rec = db.get().get(sid)
+    if not rec:
+        raise HTTPException(status_code=404, detail="not found")
+    path = rec.get("dest_path") or rec.get("source_path")
+    if not path:
+        raise HTTPException(status_code=404, detail="file not available")
+    try:
+        return FileResponse(path, filename=path.split("/")[-1])
+    except Exception:
+        raise HTTPException(status_code=404, detail="file not found on disk")
 
 
 @router.delete("/routes/{rid}")
