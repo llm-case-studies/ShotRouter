@@ -3,7 +3,44 @@
   const state = {
     view: { type: 'collection', key: 'inbox' }, // 'collection' | 'source' | 'destination' | 'sources' | 'destinations'
     sources: [],
+    expanded: {
+      collections: true,
+      sources: true,
+      destinations: true,
+      routes: true
+    }
   };
+
+  function toggleExpand(section) {
+    state.expanded[section] = !state.expanded[section];
+    localStorage.setItem('sr.expanded', JSON.stringify(state.expanded));
+    loadSidebar();
+  }
+
+  function createExpandableTitle(text, section, isActive) {
+    const titleWrapper = document.createElement('div');
+    titleWrapper.className = 'tree-title expandable';
+    if (isActive) titleWrapper.classList.add('active');
+    titleWrapper.style.cursor = 'pointer';
+
+    const icon = document.createElement('span');
+    icon.className = 'tree-expand-icon';
+    if (state.expanded[section]) icon.classList.add('expanded');
+    icon.textContent = '▶';
+
+    const label = document.createElement('span');
+    label.textContent = text;
+
+    titleWrapper.appendChild(icon);
+    titleWrapper.appendChild(label);
+
+    titleWrapper.onclick = (e) => {
+      e.stopPropagation();
+      toggleExpand(section);
+    };
+
+    return titleWrapper;
+  }
 
   function setTheme(t) {
     document.documentElement.dataset.theme = t;
@@ -67,12 +104,30 @@
         viewBtn.className = 'sr-btn';
         viewBtn.textContent = 'View';
         viewBtn.onclick = () => {
-          let pre = row.nextSibling;
-          if (pre && pre.classList && pre.classList.contains('sr-preview')) { pre.remove(); return; }
-          const prev = document.createElement('div'); prev.className='sr-preview';
-          const img = document.createElement('img'); img.src = `/api/files/${it.id}`;
-          prev.append(img);
-          row.parentNode.insertBefore(prev, row.nextSibling);
+          // Create lightbox
+          const lightbox = document.createElement('div');
+          lightbox.className = 'sr-lightbox';
+          const img = document.createElement('img');
+          img.src = `/api/files/${it.id}`;
+          const closeBtn = document.createElement('div');
+          closeBtn.className = 'sr-lightbox-close';
+          closeBtn.innerHTML = '&times;';
+          lightbox.appendChild(img);
+          lightbox.appendChild(closeBtn);
+
+          // Close on click anywhere
+          lightbox.onclick = () => lightbox.remove();
+
+          // ESC key to close
+          const escHandler = (e) => {
+            if (e.key === 'Escape') {
+              lightbox.remove();
+              document.removeEventListener('keydown', escHandler);
+            }
+          };
+          document.addEventListener('keydown', escHandler);
+
+          document.body.appendChild(lightbox);
         };
         actions.append(routeBtn, qBtn, viewBtn);
       }
@@ -214,8 +269,34 @@
       const dresp = await api('/destinations');
       const dst = (dresp.items || []).find(d => d.path === state.view.key);
       const panel = document.createElement('div'); panel.className='sr-panel';
-      const h = document.createElement('h2'); h.textContent = 'Destination';
-      const pre = document.createElement('pre'); pre.textContent = JSON.stringify(dst || {}, null, 2);
+      const h = document.createElement('h2'); h.textContent = dst?.name || 'Destination';
+
+      // Editable fields
+      const editForm = document.createElement('div'); editForm.style.marginBottom = '16px';
+      editForm.innerHTML = `
+        <div style="margin-bottom: 8px;"><strong>Path:</strong> ${dst?.path || ''}</div>
+        <div style="margin-bottom: 8px;">
+          <label>Name: <input type="text" id="dst-name" value="${dst?.name || ''}" placeholder="e.g., MyApp Project" style="width: 200px; padding: 4px;"></label>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <label>Icon: <input type="text" id="dst-icon" value="${dst?.icon || ''}" placeholder="e.g., 📁 or 🎯" style="width: 60px; padding: 4px;"></label>
+        </div>
+        <div style="margin-bottom: 8px;">
+          <label>Target Dir: <input type="text" id="dst-target-dir" value="${dst?.target_dir || ''}" placeholder="e.g., assets/images" style="width: 200px; padding: 4px;"></label>
+        </div>
+      `;
+      const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
+      saveBtn.onclick = async () => {
+        const name = document.getElementById('dst-name').value;
+        const icon = document.getElementById('dst-icon').value;
+        const target_dir = document.getElementById('dst-target-dir').value;
+        await fetch(`/api/destinations`, { method:'DELETE', body: new URLSearchParams({path: dst.path}) });
+        await fetch('/api/destinations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: dst.path, name, icon, target_dir }) });
+        await loadSidebar();
+        setView({ type: 'destination', key: dst.path });
+      };
+      editForm.appendChild(saveBtn);
+
       const routesPanel = document.createElement('div'); routesPanel.style.marginTop='12px';
       const rh = document.createElement('h3'); rh.textContent = 'Inbound Routes';
       const rtable = document.createElement('table'); rtable.className='sr-table';
@@ -240,7 +321,7 @@
       const rm = document.createElement('button'); rm.className='sr-btn'; rm.textContent='Remove Destination'; rm.style.marginLeft='8px';
       rm.onclick = async () => { await fetch(`/api/destinations?path=${encodeURIComponent(dst.path)}`, { method:'DELETE' }); await loadSidebar(); setView({ type: 'destinations' }); };
       routesPanel.append(rh, rtable, addR, rm);
-      panel.append(h, pre, routesPanel); content.append(panel);
+      panel.append(h, editForm, routesPanel); content.append(panel);
     } else if (state.view.type === 'routes') {
       const panel = document.createElement('div'); panel.className='sr-panel';
       const h = document.createElement('h2'); h.textContent = 'Routes';
@@ -258,13 +339,80 @@
       const rresp2 = await api('/routes');
       for (const r of rresp2.items || []) {
         const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
         tr.innerHTML = `<td>${r.priority}</td><td>${r.source_path}</td><td>${(r.destination.name||'')} ${r.destination.path}</td>`;
+        tr.onclick = () => setView({ type: 'route', key: r.id });
         const td = document.createElement('td');
-        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.onclick= async ()=>{ await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); setView({ type: 'routes' }); };
+        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove';
+        del.onclick= async (e)=>{ e.stopPropagation(); await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); setView({ type: 'routes' }); };
         td.append(del); tr.append(td); table.append(tr);
       }
       const controls = document.createElement('div'); controls.style.marginBottom='8px'; controls.append(add);
       panel.append(h, controls, table); content.append(panel);
+    } else if (state.view.type === 'route') {
+      // Route detail view - shows screenshots routed via this route
+      const rresp = await api('/routes');
+      const route = (rresp.items || []).find(r => r.id === state.view.key);
+      if (!route) {
+        content.innerHTML = '<div class="sr-panel">Route not found</div>';
+        return;
+      }
+
+      const panel = document.createElement('div'); panel.className='sr-panel';
+      const h = document.createElement('h2'); h.textContent = `Route #${route.priority}`;
+
+      // Route details
+      const details = document.createElement('div'); details.style.marginBottom = '16px';
+      details.innerHTML = `
+        <div><strong>Source:</strong> ${route.source_path}</div>
+        <div><strong>Destination:</strong> ${route.destination.name || ''} ${route.destination.path}</div>
+        <div><strong>Priority:</strong> ${route.priority}</div>
+        <div><strong>Status:</strong> ${route.active ? '🟢 Active' : '⚪ Inactive'}</div>
+      `;
+
+      // Screenshots routed via this route
+      const screenshotsPanel = document.createElement('div'); screenshotsPanel.style.marginTop='20px';
+      const sh = document.createElement('h3'); sh.textContent = 'Screenshots Routed';
+      screenshotsPanel.append(sh);
+
+      // Fetch screenshots where routed_via matches this route (we'd need to track this in DB)
+      // For now, show screenshots routed to this destination
+      const ssResp = await api(`/screenshots?status=routed&limit=50&offset=0`);
+      const matchedShots = (ssResp.items || []).filter(s => s.dest_path && s.dest_path.startsWith(route.destination.path));
+
+      if (matchedShots.length === 0) {
+        screenshotsPanel.append(document.createTextNode('No screenshots routed via this route yet.'));
+      } else {
+        const table = document.createElement('table'); table.className = 'sr-table';
+        const thead = document.createElement('tr'); thead.innerHTML = '<th>File</th><th>Routed At</th><th></th>';
+        table.append(thead);
+        for (const s of matchedShots) {
+          const tr = document.createElement('tr');
+          const filename = (s.dest_path || s.source_path || '').split('/').pop();
+          const routedAt = s.moved_at ? new Date(s.moved_at * 1000).toLocaleString() : 'N/A';
+          tr.innerHTML = `<td>${filename}</td><td>${routedAt}</td>`;
+          const td = document.createElement('td');
+
+          const viewBtn = document.createElement('button'); viewBtn.className='sr-btn'; viewBtn.textContent='View';
+          viewBtn.onclick = () => {
+            const lightbox = document.createElement('div'); lightbox.className = 'sr-lightbox';
+            const img = document.createElement('img'); img.src = `/api/files/${s.id}`;
+            const closeBtn = document.createElement('div'); closeBtn.className = 'sr-lightbox-close'; closeBtn.innerHTML = '&times;';
+            lightbox.appendChild(img); lightbox.appendChild(closeBtn);
+            lightbox.onclick = () => lightbox.remove();
+            const escHandler = (e) => { if (e.key === 'Escape') { lightbox.remove(); document.removeEventListener('keydown', escHandler); } };
+            document.addEventListener('keydown', escHandler);
+            document.body.appendChild(lightbox);
+          };
+
+          // Future: Add "Undo/Reroute" button here
+          td.append(viewBtn); tr.append(td); table.append(tr);
+        }
+        screenshotsPanel.append(table);
+      }
+
+      panel.append(h, details, screenshotsPanel);
+      content.append(panel);
     }
   }
 
@@ -308,14 +456,35 @@
     const sourcesResp = await api('/sources');
     state.sources = sourcesResp.items || [];
 
+    // Restore expanded state from localStorage
+    try {
+      const saved = localStorage.getItem('sr.expanded');
+      if (saved) state.expanded = { ...state.expanded, ...JSON.parse(saved) };
+    } catch {}
+
     const wrap = document.createElement('div');
-    // Collections
+
+    // Collections (with counts)
     const secC = document.createElement('div'); secC.className = 'tree-section';
-    const titleC = document.createElement('div'); titleC.className = 'tree-title'; titleC.textContent = 'Collections';
-    const listC = document.createElement('ul'); listC.className = 'tree';
+    const titleC = createExpandableTitle('Collections', 'collections', false);
+    const listC = document.createElement('ul'); listC.className = 'tree-children';
+    if (!state.expanded.collections) listC.classList.add('collapsed');
+
+    // Fetch counts for each collection
+    const counts = {};
+    try {
+      for (const key of ['inbox','routed','quarantined']) {
+        const resp = await api(`/screenshots?status=${key}&limit=1&offset=0`);
+        counts[key] = resp.items?.length || 0; // This is a rough count, ideally API should return total
+      }
+    } catch {}
+
     for (const key of ['inbox','routed','quarantined']) {
       const li = document.createElement('li');
-      const a = document.createElement('div'); a.className = 'tree-item'; a.textContent = key.charAt(0).toUpperCase()+key.slice(1);
+      const a = document.createElement('div'); a.className = 'tree-item';
+      const label = key.charAt(0).toUpperCase()+key.slice(1);
+      const count = counts[key] !== undefined ? ` (${counts[key]}+)` : '';
+      a.textContent = label + count;
       a.onclick = () => setView({ type: 'collection', key });
       if (state.view.type==='collection' && state.view.key===key) a.classList.add('active');
       li.append(a); listC.append(li);
@@ -324,10 +493,11 @@
 
     // Sources
     const secS = document.createElement('div'); secS.className = 'tree-section';
-    const titleS = document.createElement('div'); titleS.className = 'tree-title'; titleS.textContent = `Sources (${state.sources.length})`;
-    titleS.style.cursor='pointer';
-    titleS.onclick = () => setView({ type: 'sources' });
-    const listS = document.createElement('ul'); listS.className = 'tree';
+    const titleS = createExpandableTitle(`Sources (${state.sources.length})`, 'sources', state.view.type === 'sources');
+    // Allow clicking on label to open sources view
+    titleS.querySelector('span:last-child').onclick = (e) => { e.stopPropagation(); setView({ type: 'sources' }); };
+    const listS = document.createElement('ul'); listS.className = 'tree-children';
+    if (!state.expanded.sources) listS.classList.add('collapsed');
     for (const s of state.sources) {
       const li = document.createElement('li');
       const a = document.createElement('div'); a.className = 'tree-item'; a.textContent = s.path;
@@ -339,25 +509,57 @@
 
     // Destinations
     const secD = document.createElement('div'); secD.className = 'tree-section';
-    const titleD = document.createElement('div'); titleD.className = 'tree-title'; titleD.textContent = 'Destinations';
-    titleD.style.cursor='pointer';
-    titleD.onclick = () => setView({ type: 'destinations' });
-    const listD = document.createElement('ul'); listD.className = 'tree';
+    const titleD = createExpandableTitle('Destinations', 'destinations', state.view.type === 'destinations');
+    titleD.querySelector('span:last-child').onclick = (e) => { e.stopPropagation(); setView({ type: 'destinations' }); };
+    const listD = document.createElement('ul'); listD.className = 'tree-children';
+    if (!state.expanded.destinations) listD.classList.add('collapsed');
     const dests = await api('/destinations');
     for (const d of dests.items || []) {
       const li = document.createElement('li');
-      const a = document.createElement('div'); a.className = 'tree-item'; a.textContent = d.name ? `${d.name} (${d.path})` : d.path;
+      const a = document.createElement('div'); a.className = 'tree-item';
+
+      // Show icon + name or just path
+      let displayText = '';
+      if (d.icon) displayText += d.icon + ' ';
+      if (d.name) {
+        displayText += d.name;
+        const pathHint = document.createElement('span');
+        pathHint.style.opacity = '0.5';
+        pathHint.style.fontSize = '11px';
+        pathHint.style.marginLeft = '6px';
+        pathHint.textContent = d.path.split('/').pop() || d.path;
+        a.textContent = displayText;
+        a.appendChild(pathHint);
+      } else {
+        displayText += d.path;
+        a.textContent = displayText;
+      }
+
       a.onclick = () => setView({ type: 'destination', key: d.path });
       if (state.view.type==='destination' && state.view.key===d.path) a.classList.add('active');
       li.append(a); listD.append(li);
     }
     secD.append(titleD, listD);
 
-    // Routes
+    // Routes (expandable with route list)
     const secR = document.createElement('div'); secR.className = 'tree-section';
-    const titleR = document.createElement('div'); titleR.className = 'tree-title'; titleR.textContent = 'Routes';
-    titleR.style.cursor='pointer';
-    titleR.onclick = () => setView({ type: 'routes' });
+    const routesResp = await api('/routes');
+    const allRoutes = routesResp.items || [];
+    const titleR = createExpandableTitle(`Routes (${allRoutes.length})`, 'routes', state.view.type === 'routes');
+    titleR.querySelector('span:last-child').onclick = (e) => { e.stopPropagation(); setView({ type: 'routes' }); };
+    const listR = document.createElement('ul'); listR.className = 'tree-children';
+    if (!state.expanded.routes) listR.classList.add('collapsed');
+
+    for (const route of allRoutes) {
+      const li = document.createElement('li');
+      const a = document.createElement('div'); a.className = 'tree-item';
+      const routeLabel = `#${route.priority}: ${route.source_path.split('/').pop()} → ${route.destination.name || route.destination.path.split('/').pop()}`;
+      a.textContent = routeLabel;
+      a.onclick = () => setView({ type: 'route', key: route.id });
+      if (state.view.type === 'route' && state.view.key === route.id) a.classList.add('active');
+      li.append(a); listR.append(li);
+    }
+    secR.append(titleR, listR);
 
     wrap.append(secC, secS, secD, secR);
     sidebar.innerHTML = '';

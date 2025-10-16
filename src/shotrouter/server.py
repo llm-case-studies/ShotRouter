@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from fastapi import FastAPI
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -31,6 +32,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    class NoCacheAssetsMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):  # type: ignore[override]
+            response = await call_next(request)
+            p = request.url.path
+            if p.startswith("/assets/"):
+                response.headers["Cache-Control"] = "no-store, max-age=0"
+                response.headers["Pragma"] = "no-cache"
+                response.headers["Expires"] = "0"
+            return response
+
+    app.add_middleware(NoCacheAssetsMiddleware)
 
     # API routes & WebSocket
     app.include_router(routes.router, prefix="/api")
