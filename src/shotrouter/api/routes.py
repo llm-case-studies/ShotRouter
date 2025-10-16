@@ -101,7 +101,13 @@ class SourceBody(BaseModel):
 
 @router.get("/sources")
 def list_sources() -> Dict[str, Any]:
-    return {"items": [s.__dict__ for s in source_registry.list()]}
+    # Merge registry with active watchers to avoid inconsistencies
+    reg = {s.path: s for s in source_registry.list()}
+    for w in watch_manager.list_active():
+        path = w.get("path")
+        if path and path not in reg:
+            reg[path] = Source(path=path, enabled=bool(w.get("running")), debounce_ms=int(w.get("debounce_ms") or 400))
+    return {"items": [s.__dict__ for s in reg.values()]}
 
 
 @router.post("/sources")
@@ -139,6 +145,72 @@ def status() -> Dict[str, Any]:
         "watching_count": sum(1 for w in watchers if w.get("running")),
         "watchers": watchers,
     }
+
+
+# Destinations
+class DestinationBody(BaseModel):
+    path: str
+    target_dir: str = "assets/images"
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    name_format: Optional[str] = None
+
+
+@router.get("/destinations")
+def list_destinations() -> Dict[str, Any]:
+    import os
+    items = db.get().list_destinations()
+    for it in items:
+        it["exists"] = os.path.isdir(it["path"])
+    return {"items": items}
+
+
+@router.post("/destinations")
+def add_destination(body: DestinationBody) -> Dict[str, Any]:
+    rec = db.get().add_destination(path=body.path, target_dir=body.target_dir, name=body.name, icon=body.icon, name_format=body.name_format)
+    return {"destination": rec}
+
+
+@router.delete("/destinations")
+def remove_destination(path: str) -> Dict[str, Any]:
+    ok = db.get().delete_destination(path)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
+
+
+# Routes
+class RouteAddBody(BaseModel):
+    source_path: str
+    dest_path: str
+    priority: int = 1
+    active: bool = True
+
+
+@router.get("/routes")
+def list_routes(source_path: Optional[str] = None) -> Dict[str, Any]:
+    routes = db.get().list_routes(source_path=source_path)
+    # Attach minimal destination info
+    dsts = {d["path"]: d for d in db.get().list_destinations()}
+    out = []
+    for r in routes:
+        d = dsts.get(r["dest_path"]) or {"path": r["dest_path"], "target_dir": "assets/images"}
+        out.append({**r, "destination": {"path": d["path"], "target_dir": d.get("target_dir", "assets/images"), "name": d.get("name")}})
+    return {"items": out}
+
+
+@router.post("/routes")
+def add_route(body: RouteAddBody) -> Dict[str, Any]:
+    rec = db.get().add_route(source_path=body.source_path, dest_path=body.dest_path, priority=body.priority, active=body.active)
+    return {"route": rec}
+
+
+@router.delete("/routes/{rid}")
+def delete_route(rid: str) -> Dict[str, Any]:
+    ok = db.get().delete_route(rid)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
 
 
 # Compliance stubs

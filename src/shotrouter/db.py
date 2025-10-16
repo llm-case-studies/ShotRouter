@@ -46,6 +46,35 @@ class Database:
         self._exec("CREATE INDEX IF NOT EXISTS idx_screenshot_status ON screenshot(status);")
         self._exec("CREATE INDEX IF NOT EXISTS idx_screenshot_created ON screenshot(created_at DESC);")
 
+        # Destinations (targets)
+        self._exec(
+            """
+            CREATE TABLE IF NOT EXISTS destination (
+                id TEXT PRIMARY KEY,
+                path TEXT UNIQUE NOT NULL,
+                target_dir TEXT DEFAULT 'assets/images',
+                name TEXT,
+                icon TEXT,
+                name_format TEXT,
+                created_at REAL
+            );
+            """
+        )
+        # Routes (source path -> destination path)
+        self._exec(
+            """
+            CREATE TABLE IF NOT EXISTS route (
+                id TEXT PRIMARY KEY,
+                source_path TEXT NOT NULL,
+                dest_path TEXT NOT NULL,
+                priority INTEGER NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at REAL
+            );
+            """
+        )
+        self._exec("CREATE INDEX IF NOT EXISTS idx_route_source ON route(source_path, priority);")
+
     def add_screenshot(self, source_path: str, size: int) -> Dict[str, Any]:
         sid = f"sr_{uuid.uuid4().hex[:8]}"
         now = time.time()
@@ -91,6 +120,46 @@ class Database:
         cur = self._exec("DELETE FROM screenshot WHERE id=?", (sid,))
         return cur.rowcount > 0
 
+    # Destinations
+    def add_destination(self, path: str, target_dir: str = "assets/images", name: Optional[str] = None, icon: Optional[str] = None, name_format: Optional[str] = None) -> Dict[str, Any]:
+        did = f"dst_{uuid.uuid4().hex[:8]}"
+        now = time.time()
+        self._exec(
+            "INSERT OR IGNORE INTO destination (id, path, target_dir, name, icon, name_format, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (did, path, target_dir, name, icon, name_format, now),
+        )
+        row = self._query("SELECT id, path, target_dir, name, icon, name_format FROM destination WHERE path=?", (path,))
+        return dict(row[0]) if row else {"id": did, "path": path, "target_dir": target_dir, "name": name, "icon": icon, "name_format": name_format}
+
+    def list_destinations(self) -> List[Dict[str, Any]]:
+        rows = self._query("SELECT id, path, target_dir, name, icon, name_format FROM destination ORDER BY created_at DESC")
+        return [dict(r) for r in rows]
+
+    def delete_destination(self, path: str) -> bool:
+        cur = self._exec("DELETE FROM destination WHERE path=?", (path,))
+        return cur.rowcount > 0
+
+    # Routes
+    def add_route(self, source_path: str, dest_path: str, priority: int = 1, active: bool = True) -> Dict[str, Any]:
+        rid = f"rt_{uuid.uuid4().hex[:8]}"
+        now = time.time()
+        self._exec(
+            "INSERT INTO route (id, source_path, dest_path, priority, active, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (rid, source_path, dest_path, priority, 1 if active else 0, now),
+        )
+        return {"id": rid, "source_path": source_path, "dest_path": dest_path, "priority": priority, "active": active}
+
+    def list_routes(self, source_path: Optional[str] = None) -> List[Dict[str, Any]]:
+        if source_path:
+            rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route WHERE source_path=? ORDER BY priority ASC, created_at ASC", (source_path,))
+        else:
+            rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route ORDER BY source_path, priority ASC")
+        return [dict(r) for r in rows]
+
+    def delete_route(self, rid: str) -> bool:
+        cur = self._exec("DELETE FROM route WHERE id=?", (rid,))
+        return cur.rowcount > 0
+
 
 _db: Optional[Database] = None
 
@@ -122,4 +191,3 @@ def get() -> Database:
     if _db is None:
         return init(None)
     return _db
-

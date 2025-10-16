@@ -24,15 +24,31 @@
         routeBtn.className = 'sr-btn sr-btn--primary';
         routeBtn.textContent = 'Route';
         routeBtn.onclick = async () => {
-          // If nothing armed, prompt for repo path and send with body
-          let armed = null;
-          try { armed = (await api('/settings')).armed || null; } catch {}
-          if (!armed || !armed.repo_path) {
-            const repo = prompt('Route to repo path?', '.');
-            if (!repo) return;
-            await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id], repo_path: repo, target_dir: 'assets/images' }) });
-          } else {
-            await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id] }) });
+          // Prefer configured routes by source directory; fallback to armed/prompt
+          let routed = false;
+          try {
+            const sp = it.source_path || '';
+            const idx = Math.max(sp.lastIndexOf('/'), sp.lastIndexOf('\\\\'));
+            const srcDir = idx >= 0 ? sp.substring(0, idx) : null;
+            if (srcDir) {
+              const rresp = await api(`/routes?source_path=${encodeURIComponent(srcDir)}`);
+              if (rresp.items && rresp.items.length) {
+                const r0 = rresp.items[0];
+                await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id], repo_path: r0.destination.path, target_dir: r0.destination.target_dir || 'assets/images' }) });
+                routed = true;
+              }
+            }
+          } catch {}
+          if (!routed) {
+            let armed = null;
+            try { armed = (await api('/settings')).armed || null; } catch {}
+            if (!armed || !armed.repo_path) {
+              const repo = prompt('Route to repo path?', '.');
+              if (!repo) return;
+              await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id], repo_path: repo, target_dir: 'assets/images' }) });
+            } else {
+              await api('/route', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: [it.id] }) });
+            }
           }
           await refresh();
         };
@@ -82,7 +98,42 @@
         setView({ type: 'collection', key: 'inbox' });
       };
       actions.append(rm);
-      panel.append(h, p, actions);
+
+      // Routes panel
+      const routesPanel = document.createElement('div'); routesPanel.style.marginTop = '12px';
+      const rh = document.createElement('h3'); rh.textContent = 'Routes';
+      const rtable = document.createElement('table'); rtable.className = 'sr-table';
+      const head = document.createElement('tr'); head.innerHTML = '<th>Priority</th><th>Destination</th><th></th>';
+      rtable.append(head);
+      const rresp = await api(`/routes?source_path=${encodeURIComponent(src.path)}`);
+      for (const r of rresp.items || []) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.priority}</td><td>${(r.destination.name || '')} ${r.destination.path}</td>`;
+        const td = document.createElement('td');
+        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove';
+        del.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); await refresh(); };
+        td.append(del); tr.append(td); rtable.append(tr);
+      }
+      const addR = document.createElement('button'); addR.className='sr-btn'; addR.textContent='Add Route';
+      addR.onclick = async () => {
+        const dest = prompt('Destination path? (must be added in Destinations)'); if (!dest) return;
+        const pr = parseInt(prompt('Priority? (1 is highest)', '1') || '1', 10);
+        await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: src.path, dest_path: dest, priority: pr }) });
+        await refresh();
+      };
+      routesPanel.append(rh, rtable, addR);
+
+      panel.append(h, p, actions, routesPanel);
+      content.append(panel);
+    } else if (state.view.type === 'destination') {
+      const dresp = await api('/destinations');
+      const dst = (dresp.items || []).find(d => d.path === state.view.key);
+      const panel = document.createElement('div'); panel.className='sr-panel';
+      const h = document.createElement('h2'); h.textContent = 'Destination';
+      const pre = document.createElement('pre'); pre.textContent = JSON.stringify(dst || {}, null, 2);
+      const rm = document.createElement('button'); rm.className='sr-btn'; rm.textContent='Remove Destination';
+      rm.onclick = async () => { await fetch(`/api/destinations?path=${encodeURIComponent(dst.path)}`, { method:'DELETE' }); await loadSidebar(); setView({ type: 'collection', key: 'inbox' }); };
+      panel.append(h, pre, rm);
       content.append(panel);
     }
   }
@@ -165,7 +216,31 @@
     }
     secS.append(titleS, addWrap, listS);
 
-    wrap.append(secC, secS);
+    // Destinations
+    const secD = document.createElement('div'); secD.className = 'tree-section';
+    const titleD = document.createElement('div'); titleD.className = 'tree-title'; titleD.textContent = 'Destinations';
+    const addD = document.createElement('div'); addD.style.margin = '8px 0';
+    const inputD = document.createElement('input'); inputD.placeholder = 'Add destination path…'; inputD.style.width = '100%';
+    inputD.onkeydown = async (e) => {
+      if (e.key==='Enter' && inputD.value.trim()) {
+        const body = { path: inputD.value.trim(), target_dir: 'assets/images' };
+        const resp = await fetch('/api/destinations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        if (resp.ok) { inputD.value=''; await loadSidebar(); } else { alert('Failed to add destination'); }
+      }
+    };
+    addD.append(inputD);
+    const listD = document.createElement('ul'); listD.className = 'tree';
+    const dests = await api('/destinations');
+    for (const d of dests.items || []) {
+      const li = document.createElement('li');
+      const a = document.createElement('div'); a.className = 'tree-item'; a.textContent = d.name ? `${d.name} (${d.path})` : d.path;
+      a.onclick = () => setView({ type: 'destination', key: d.path });
+      if (state.view.type==='destination' && state.view.key===d.path) a.classList.add('active');
+      li.append(a); listD.append(li);
+    }
+    secD.append(titleD, addD, listD);
+
+    wrap.append(secC, secS, secD);
     sidebar.innerHTML = '';
     sidebar.append(wrap);
   }
