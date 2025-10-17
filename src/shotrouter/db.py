@@ -160,6 +160,22 @@ class Database:
             rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route ORDER BY source_path, priority ASC")
         return [dict(r) for r in rows]
 
+    def update_route(self, rid: str, priority: Optional[int] = None, active: Optional[bool] = None) -> bool:
+        updates = []
+        params = []
+        if priority is not None:
+            updates.append("priority = ?")
+            params.append(priority)
+        if active is not None:
+            updates.append("active = ?")
+            params.append(1 if active else 0)
+        if not updates:
+            return False
+        params.append(rid)
+        sql = f"UPDATE route SET {', '.join(updates)} WHERE id = ?"
+        cur = self._exec(sql, tuple(params))
+        return cur.rowcount > 0
+
     def delete_route(self, rid: str) -> bool:
         cur = self._exec("DELETE FROM route WHERE id=?", (rid,))
         return cur.rowcount > 0

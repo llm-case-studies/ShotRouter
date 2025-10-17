@@ -410,8 +410,16 @@
       saveBtn.onclick = async () => {
         const enabled = document.getElementById('route-enabled').checked;
         const priority = parseInt(document.getElementById('route-priority').value, 10);
-        // TODO: API endpoint to update route
-        alert('Save functionality coming soon - need PATCH /api/routes/{id} endpoint');
+        try {
+          const params = new URLSearchParams();
+          params.append('active', enabled);
+          params.append('priority', priority);
+          await fetch(`/api/routes/${route.id}?${params}`, { method: 'PATCH' });
+          alert('Route updated successfully!');
+          await refresh();
+        } catch (err) {
+          alert('Failed to save: ' + err.message);
+        }
       };
 
       const deleteBtn = document.createElement('button'); deleteBtn.className='sr-btn'; deleteBtn.textContent='Delete Route'; deleteBtn.style.marginLeft='8px';
@@ -435,9 +443,19 @@
       if (matchedShots.length === 0) {
         itemsPanel.innerHTML = '<div style="opacity: 0.7;">No screenshots routed yet.</div>';
       } else {
+        // Create split layout: table + detail pane
+        const splitContainer = document.createElement('div');
+        splitContainer.style.cssText = 'display: grid; grid-template-columns: 1fr 400px; gap: 16px;';
+
+        const tableContainer = document.createElement('div');
+        const detailPane = document.createElement('div');
+        detailPane.className = 'sr-panel';
+        detailPane.style.cssText = 'min-height: 400px;';
+        detailPane.innerHTML = '<div style="opacity: 0.7; padding: 24px; text-align: center;">Select an item to view details</div>';
+
         const table = document.createElement('table'); table.className = 'sr-table';
         const thead = document.createElement('tr');
-        thead.innerHTML = '<th>ID</th><th>File</th><th>Source</th><th>Destination</th><th>Routed At</th><th>Size</th><th></th>';
+        thead.innerHTML = '<th>ID</th><th>File</th><th>Source</th><th>Destination</th><th>Routed At</th><th>Size</th>';
         table.append(thead);
 
         for (const s of matchedShots) {
@@ -455,22 +473,76 @@
             <td>${size}</td>
           `;
 
-          const td = document.createElement('td');
-          const viewBtn = document.createElement('button'); viewBtn.className='sr-btn'; viewBtn.textContent='View';
-          viewBtn.onclick = () => {
-            const lightbox = document.createElement('div'); lightbox.className = 'sr-lightbox';
-            const img = document.createElement('img'); img.src = `/api/files/${s.id}`;
-            const closeBtn = document.createElement('div'); closeBtn.className = 'sr-lightbox-close'; closeBtn.innerHTML = '&times;';
-            lightbox.appendChild(img); lightbox.appendChild(closeBtn);
-            lightbox.onclick = () => lightbox.remove();
-            const escHandler = (e) => { if (e.key === 'Escape') { lightbox.remove(); document.removeEventListener('keydown', escHandler); } };
-            document.addEventListener('keydown', escHandler);
-            document.body.appendChild(lightbox);
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => {
+            // Remove previous selection
+            table.querySelectorAll('tr').forEach(r => r.style.background = '');
+            tr.style.background = 'rgba(255,255,255,0.08)';
+
+            // Update detail pane
+            detailPane.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = `/api/files/${s.id}`;
+            img.style.cssText = 'max-width: 100%; height: auto; display: block; border-radius: 4px; margin-bottom: 16px; cursor: pointer;';
+            img.onclick = () => {
+              const lightbox = document.createElement('div'); lightbox.className = 'sr-lightbox';
+              const imgLarge = document.createElement('img'); imgLarge.src = `/api/files/${s.id}`;
+              const closeBtn = document.createElement('div'); closeBtn.className = 'sr-lightbox-close'; closeBtn.innerHTML = '&times;';
+              lightbox.appendChild(imgLarge); lightbox.appendChild(closeBtn);
+              lightbox.onclick = () => lightbox.remove();
+              const escHandler = (e) => { if (e.key === 'Escape') { lightbox.remove(); document.removeEventListener('keydown', escHandler); } };
+              document.addEventListener('keydown', escHandler);
+              document.body.appendChild(lightbox);
+            };
+
+            const info = document.createElement('div');
+            info.style.cssText = 'margin-bottom: 16px; font-size: 13px;';
+            info.innerHTML = `
+              <div style="margin-bottom: 4px;"><strong>File:</strong> ${filename}</div>
+              <div style="margin-bottom: 4px;"><strong>ID:</strong> <span style="font-family: monospace; font-size: 11px;">${s.id}</span></div>
+              <div style="margin-bottom: 4px;"><strong>Source:</strong> ${s.source_path || 'N/A'}</div>
+              <div style="margin-bottom: 4px;"><strong>Destination:</strong> ${s.dest_path || 'N/A'}</div>
+              <div style="margin-bottom: 4px;"><strong>Routed At:</strong> ${routedAt}</div>
+              <div style="margin-bottom: 4px;"><strong>Size:</strong> ${size}</div>
+            `;
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display: flex; gap: 8px; flex-wrap: wrap;';
+
+            const undoBtn = document.createElement('button'); undoBtn.className = 'sr-btn'; undoBtn.textContent = 'Undo';
+            undoBtn.onclick = async () => {
+              if (confirm(`Undo routing for ${filename}? This will move it back to inbox.`)) {
+                alert('Undo functionality coming soon - need POST /api/screenshots/{id}/undo endpoint');
+              }
+            };
+
+            const rerouteBtn = document.createElement('button'); rerouteBtn.className = 'sr-btn'; rerouteBtn.textContent = 'Re-route';
+            rerouteBtn.onclick = async () => {
+              alert('Re-route functionality coming soon - need route selection UI');
+            };
+
+            const deleteBtn = document.createElement('button'); deleteBtn.className = 'sr-btn'; deleteBtn.textContent = 'Delete';
+            deleteBtn.onclick = async () => {
+              if (confirm(`Delete ${filename}? This cannot be undone.`)) {
+                try {
+                  await api(`/screenshots/${s.id}`, { method: 'DELETE' });
+                  await refresh();
+                } catch (err) {
+                  alert('Failed to delete: ' + err.message);
+                }
+              }
+            };
+
+            actions.append(undoBtn, rerouteBtn, deleteBtn);
+            detailPane.append(img, info, actions);
           };
 
-          td.append(viewBtn); tr.append(td); table.append(tr);
+          table.append(tr);
         }
-        itemsPanel.append(table);
+
+        tableContainer.append(table);
+        splitContainer.append(tableContainer, detailPane);
+        itemsPanel.append(splitContainer);
       }
 
       itemsContent.appendChild(itemsPanel);

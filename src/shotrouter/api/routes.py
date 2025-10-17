@@ -225,6 +225,14 @@ def get_file(sid: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="file not found on disk")
 
 
+@router.patch("/routes/{rid}")
+def update_route(rid: str, priority: Optional[int] = None, active: Optional[bool] = None) -> Dict[str, Any]:
+    ok = db.get().update_route(rid, priority=priority, active=active)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found")
+    return {"status": "ok"}
+
+
 @router.delete("/routes/{rid}")
 def delete_route(rid: str) -> Dict[str, Any]:
     ok = db.get().delete_route(rid)
