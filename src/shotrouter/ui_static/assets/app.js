@@ -411,10 +411,10 @@
         const enabled = document.getElementById('route-enabled').checked;
         const priority = parseInt(document.getElementById('route-priority').value, 10);
         try {
-          const params = new URLSearchParams();
-          params.append('active', enabled);
-          params.append('priority', priority);
-          await fetch(`/api/routes/${route.id}?${params}`, { method: 'PATCH' });
+          await api(`/routes/${route.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ active: enabled, priority: priority })
+          });
           alert('Route updated successfully!');
           await refresh();
         } catch (err) {

@@ -227,9 +227,14 @@ def get_file(sid: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="file not found on disk")
 
 
+class RouteUpdateBody(BaseModel):
+    priority: Optional[int] = None
+    active: Optional[bool] = None
+
+
 @router.patch("/routes/{rid}")
-def update_route(rid: str, priority: Optional[int] = None, active: Optional[bool] = None) -> Dict[str, Any]:
-    ok = db.get().update_route(rid, priority=priority, active=active)
+def update_route(rid: str, body: RouteUpdateBody) -> Dict[str, Any]:
+    ok = db.get().update_route(rid, priority=body.priority, active=body.active)
     if not ok:
         raise HTTPException(status_code=404, detail="not found")
     return {"status": "ok"}
