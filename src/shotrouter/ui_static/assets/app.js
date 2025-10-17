@@ -198,16 +198,6 @@
 
       panel.append(h, p, actions, routesPanel);
       content.append(panel);
-    } else if (state.view.type === 'destination') {
-      const dresp = await api('/destinations');
-      const dst = (dresp.items || []).find(d => d.path === state.view.key);
-      const panel = document.createElement('div'); panel.className='sr-panel';
-      const h = document.createElement('h2'); h.textContent = 'Destination';
-      const pre = document.createElement('pre'); pre.textContent = JSON.stringify(dst || {}, null, 2);
-      const rm = document.createElement('button'); rm.className='sr-btn'; rm.textContent='Remove Destination';
-      rm.onclick = async () => { await fetch(`/api/destinations?path=${encodeURIComponent(dst.path)}`, { method:'DELETE' }); await loadSidebar(); setView({ type: 'collection', key: 'inbox' }); };
-      panel.append(h, pre, rm);
-      content.append(panel);
     } else if (state.view.type === 'sources') {
       const panel = document.createElement('div'); panel.className='sr-panel';
       const h = document.createElement('h2'); h.textContent = `Sources (${state.sources.length})`;
