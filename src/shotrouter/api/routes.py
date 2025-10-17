@@ -9,7 +9,14 @@ from fastapi import Request
 from ..state import get_app_state
 from ..events import broadcast
 from ..sources import registry as source_registry, Source
-from ..config import get_default_source_candidates
+from ..config import (
+    get_default_source_candidates,
+    load_config,
+    save_config,
+    AppConfig,
+    SourceConfig,
+    canonicalize_path,
+)
 from ..watcher import manager as watch_manager
 from .. import db
 from ..routing import route_to
@@ -81,17 +88,32 @@ class SettingsBody(BaseModel):
 def get_settings() -> Dict[str, Any]:
     # Placeholder: return minimal effective config
     st = get_app_state()
+    cfg = load_config()
     return {
         "api": {"host": "127.0.0.1", "port": 8767},
         "armed": {"repo_path": st.armed_repo_path, "target_dir": st.armed_target_dir},
         "sources": [s.path for s in source_registry.list()],
+        "debounce_ms": cfg.debounce_ms,
+        "inbox_dir": cfg.inbox_dir,
+        "notes": {
+            "debounce_runtime": "Changing debounce_ms via settings will apply after restart."
+        },
     }
 
 
 @router.post("/settings")
 def set_settings(body: SettingsBody) -> Dict[str, Any]:
-    # Placeholder: accept and echo; real impl would persist
+    # Back-compat: accept and echo
     return {"status": "ok", "updated": body.model_dump(exclude_none=True)}
+
+
+@router.patch("/settings")
+def patch_settings(body: SettingsBody) -> Dict[str, Any]:
+    cfg = load_config()
+    debounce = cfg.debounce_ms if body.debounce_ms is None else int(body.debounce_ms)
+    inbox = cfg.inbox_dir if body.inbox_dir is None else body.inbox_dir
+    save_config(AppConfig(sources=cfg.sources, debounce_ms=debounce, inbox_dir=inbox))
+    return {"status": "ok"}
 
 
 # Sources API (in-memory)
@@ -114,24 +136,43 @@ def list_sources() -> Dict[str, Any]:
 
 @router.post("/sources")
 def add_source(body: SourceBody) -> Dict[str, Any]:
-    p = Path(body.path).expanduser()
+    p = Path(canonicalize_path(body.path))
     if not p.exists():
         raise HTTPException(status_code=400, detail="path does not exist")
     source_registry.add(Source(path=str(p), enabled=body.enabled, debounce_ms=body.debounce_ms))
     if body.enabled:
         watch_manager.start_for(p, debounce_ms=body.debounce_ms)
+    # Persist to config (write-through)
+    cfg = load_config()
+    # Replace if exists by path, else append
+    new_sources: List[SourceConfig] = []
+    found = False
+    for s in cfg.sources:
+        if Path(canonicalize_path(s.path)) == p:
+            new_sources.append(SourceConfig(path=str(p), enabled=body.enabled, debounce_ms=body.debounce_ms, name=s.name, icon=s.icon))
+            found = True
+        else:
+            new_sources.append(s)
+    if not found:
+        new_sources.append(SourceConfig(path=str(p), enabled=body.enabled, debounce_ms=body.debounce_ms))
+    save_config(AppConfig(sources=new_sources, debounce_ms=cfg.debounce_ms, inbox_dir=cfg.inbox_dir))
     return {"status": "ok"}
 
 
 @router.delete("/sources")
 def remove_source(path: str) -> Dict[str, Any]:
-    ok = source_registry.remove(path)
+    cpath = canonicalize_path(path)
+    ok = source_registry.remove(cpath)
     if not ok:
         raise HTTPException(status_code=404, detail="not found")
     try:
-        watch_manager.stop_for(Path(path))
+        watch_manager.stop_for(Path(cpath))
     except Exception:
         pass
+    # Persist removal to config
+    cfg = load_config()
+    new_sources = [s for s in cfg.sources if canonicalize_path(s.path) != cpath]
+    save_config(AppConfig(sources=new_sources, debounce_ms=cfg.debounce_ms, inbox_dir=cfg.inbox_dir))
     return {"status": "ok"}
 
 
