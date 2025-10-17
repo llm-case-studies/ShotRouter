@@ -87,12 +87,12 @@ class Database:
     def list_screenshots(self, status: Optional[str], limit: int, offset: int) -> List[Dict[str, Any]]:
         if status:
             rows = self._query(
-                "SELECT id, status, source_path, dest_path, size, created_at FROM screenshot WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                "SELECT id, status, source_path, dest_path, size, created_at, moved_at FROM screenshot WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 (status, limit, offset),
             )
         else:
             rows = self._query(
-                "SELECT id, status, source_path, dest_path, size, created_at FROM screenshot ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                "SELECT id, status, source_path, dest_path, size, created_at, moved_at FROM screenshot ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             )
         return [dict(row) for row in rows]
@@ -175,6 +175,23 @@ class Database:
         sql = f"UPDATE route SET {', '.join(updates)} WHERE id = ?"
         cur = self._exec(sql, tuple(params))
         return cur.rowcount > 0
+
+    def get_route(self, rid: str) -> Optional[Dict[str, Any]]:
+        rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route WHERE id=?", (rid,))
+        return dict(rows[0]) if rows else None
+
+    def list_screenshots_for_route(self, source_prefix: str, dest_prefix: str, limit: int = 200, offset: int = 0) -> List[Dict[str, Any]]:
+        rows = self._query(
+            """
+            SELECT id, status, source_path, dest_path, size, created_at, moved_at
+            FROM screenshot
+            WHERE status='routed' AND source_path LIKE ? AND dest_path LIKE ?
+            ORDER BY COALESCE(moved_at, created_at) DESC
+            LIMIT ? OFFSET ?
+            """,
+            (f"{source_prefix}%", f"{dest_prefix}%", limit, offset),
+        )
+        return [dict(r) for r in rows]
 
     def delete_route(self, rid: str) -> bool:
         cur = self._exec("DELETE FROM route WHERE id=?", (rid,))

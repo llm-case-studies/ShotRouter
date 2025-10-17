@@ -145,6 +145,7 @@ def status() -> Dict[str, Any]:
     return {
         "watching_count": sum(1 for w in watchers if w.get("running")),
         "watchers": watchers,
+        "db_path": db.get().path,
     }
 
 
@@ -211,6 +212,24 @@ def add_route(body: RouteAddBody) -> Dict[str, Any]:
         db.get().add_destination(path=body.dest_path, target_dir="")
     rec = db.get().add_route(source_path=body.source_path, dest_path=body.dest_path, priority=body.priority, active=body.active)
     return {"route": rec}
+
+
+@router.get("/routes/{rid}")
+def get_route_detail(rid: str) -> Dict[str, Any]:
+    r = db.get().get_route(rid)
+    if not r:
+        raise HTTPException(status_code=404, detail="not found")
+    d = db.get().get_destination(r["dest_path"]) or {"path": r["dest_path"], "target_dir": ""}
+    return {"route": {**r, "active": bool(r.get("active", 1)), "destination": d}}
+
+
+@router.get("/routes/{rid}/items")
+def get_route_items(rid: str, limit: int = 200, offset: int = 0) -> Dict[str, Any]:
+    r = db.get().get_route(rid)
+    if not r:
+        raise HTTPException(status_code=404, detail="not found")
+    items = db.get().list_screenshots_for_route(r["source_path"], r["dest_path"], limit=limit, offset=offset)
+    return {"items": items}
 
 
 @router.get("/files/{sid}")

@@ -183,9 +183,18 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${r.priority}</td><td>${(r.destination.name || '')} ${r.destination.path}</td>`;
         const td = document.createElement('td');
-        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove';
+        const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
+        toggle.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); await refresh(); };
+        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
         del.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); await refresh(); };
-        td.append(del); tr.append(td); rtable.append(tr);
+        const clone = document.createElement('button'); clone.className='sr-btn'; clone.textContent='Clone'; clone.style.marginLeft='6px';
+        clone.onclick = async () => {
+          const newDest = prompt('Clone to destination path:', r.destination.path); if (!newDest) return;
+          const pr = parseInt(prompt('Priority? (1 is highest)', String(r.priority)) || String(r.priority), 10);
+          await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: src.path, dest_path: newDest, priority: pr }) });
+          await refresh();
+        };
+        td.append(toggle, del, clone); tr.append(td); rtable.append(tr);
       }
       const addR = document.createElement('button'); addR.className='sr-btn'; addR.textContent='Add Route';
       addR.onclick = async () => {
@@ -297,9 +306,18 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${r.priority}</td><td>${r.source_path}</td>`;
         const td = document.createElement('td');
-        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove';
+        const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
+        toggle.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); await refresh(); };
+        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
         del.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); await refresh(); };
-        td.append(del); tr.append(td); rtable.append(tr);
+        const clone = document.createElement('button'); clone.className='sr-btn'; clone.textContent='Clone'; clone.style.marginLeft='6px';
+        clone.onclick = async () => {
+          const newSrc = prompt('Clone from source path:', r.source_path); if (!newSrc) return;
+          const pr = parseInt(prompt('Priority? (1 is highest)', String(r.priority)) || String(r.priority), 10);
+          await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: newSrc, dest_path: dst.path, priority: pr }) });
+          await refresh();
+        };
+        td.append(toggle, del, clone); tr.append(td); rtable.append(tr);
       }
       const addR = document.createElement('button'); addR.className='sr-btn'; addR.textContent='Add Route from Source';
       addR.onclick = async () => {
@@ -333,9 +351,13 @@
         tr.innerHTML = `<td>${r.priority}</td><td>${r.source_path}</td><td>${(r.destination.name||'')} ${r.destination.path}</td>`;
         tr.onclick = () => setView({ type: 'route', key: r.id });
         const td = document.createElement('td');
-        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove';
+        const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
+        toggle.onclick= async (e)=>{ e.stopPropagation(); await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); setView({ type: 'routes' }); };
+        const clone = document.createElement('button'); clone.className='sr-btn'; clone.textContent='Clone'; clone.style.marginLeft='6px';
+        clone.onclick= async (e)=>{ e.stopPropagation(); const newSrc=prompt('Clone source path:', r.source_path); if(!newSrc) return; const newDst=prompt('Clone destination path:', r.destination.path); if(!newDst) return; const pr=parseInt(prompt('Priority? (1 is highest)', String(r.priority))||String(r.priority),10); await fetch('/api/routes',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ source_path:newSrc, dest_path:newDst, priority:pr })}); setView({ type:'routes' }); };
+        const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
         del.onclick= async (e)=>{ e.stopPropagation(); await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); setView({ type: 'routes' }); };
-        td.append(del); tr.append(td); table.append(tr);
+        td.append(toggle, clone, del); tr.append(td); table.append(tr);
       }
       const controls = document.createElement('div'); controls.style.marginBottom='8px'; controls.append(add);
       panel.append(h, controls, table); content.append(panel);
@@ -422,6 +444,15 @@
         }
       };
 
+      const cloneBtn = document.createElement('button'); cloneBtn.className='sr-btn'; cloneBtn.textContent='Clone Route…'; cloneBtn.style.marginLeft='8px';
+      cloneBtn.onclick = async () => {
+        const newSrc = prompt('Clone source path:', route.source_path); if (!newSrc) return;
+        const newDst = prompt('Clone destination path:', route.destination.path); if (!newDst) return;
+        const pr = parseInt(prompt('Priority? (1 is highest)', String(route.priority)) || String(route.priority), 10);
+        await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: newSrc, dest_path: newDst, priority: pr }) });
+        alert('Cloned!');
+      };
+
       const deleteBtn = document.createElement('button'); deleteBtn.className='sr-btn'; deleteBtn.textContent='Delete Route'; deleteBtn.style.marginLeft='8px';
       deleteBtn.onclick = async () => {
         if (!confirm('Delete this route?')) return;
@@ -430,6 +461,7 @@
       };
 
       configForm.appendChild(saveBtn);
+      configForm.appendChild(cloneBtn);
       configForm.appendChild(deleteBtn);
       configContent.appendChild(configForm);
 

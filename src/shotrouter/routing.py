@@ -52,7 +52,8 @@ def route_via_route_record(sid: str, source_dir: str) -> Optional[str]:
     """Route using first active route for source_dir if any.
     Returns final path or None if no route applied.
     """
-    routes = db.get().list_routes(source_path=source_dir)
+    # Only consider active routes
+    routes = [r for r in db.get().list_routes(source_path=source_dir) if bool(r.get("active", 1))]
     if not routes:
         return None
     r0 = routes[0]
