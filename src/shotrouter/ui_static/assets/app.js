@@ -1,5 +1,45 @@
 (function () {
-  const api = (path, opts = {}) => fetch(`/api${path}`, opts).then(r => r.json());
+  const api = (path, opts = {}) => {
+    // Auto-set Content-Type for requests with a body
+    if (opts.body && !opts.headers) {
+      opts.headers = { 'Content-Type': 'application/json' };
+    } else if (opts.body && opts.headers && !opts.headers['Content-Type']) {
+      opts.headers['Content-Type'] = 'application/json';
+    }
+
+    // Log requests in development (when ?debug=1 is in URL)
+    const debug = new URLSearchParams(window.location.search).get('debug') === '1';
+    if (debug) {
+      console.log(`[API Request] ${opts.method || 'GET'} /api${path}`, {
+        headers: opts.headers,
+        body: opts.body ? JSON.parse(opts.body) : undefined
+      });
+    }
+
+    return fetch(`/api${path}`, opts)
+      .then(r => {
+        if (debug) {
+          console.log(`[API Response] ${opts.method || 'GET'} /api${path}`, {
+            status: r.status,
+            statusText: r.statusText,
+            headers: Object.fromEntries(r.headers.entries())
+          });
+        }
+        return r.json();
+      })
+      .then(data => {
+        if (debug) {
+          console.log(`[API Data] ${opts.method || 'GET'} /api${path}`, data);
+        }
+        return data;
+      })
+      .catch(err => {
+        if (debug) {
+          console.error(`[API Error] ${opts.method || 'GET'} /api${path}`, err);
+        }
+        throw err;
+      });
+  };
   const state = {
     view: { type: 'collection', key: 'inbox' }, // 'collection' | 'source' | 'destination' | 'sources' | 'destinations'
     sources: [],
@@ -146,12 +186,114 @@
       panel.className = 'sr-panel';
       const h = document.createElement('h2');
       h.textContent = (status === 'inbox' ? 'Inbox (unrouted)' : status.charAt(0).toUpperCase() + status.slice(1));
-      const listWrap = document.createElement('div');
-      listWrap.id = 'list';
-      panel.append(h, listWrap);
-      content.append(panel);
+      panel.append(h);
       const resp = await api(`/screenshots?status=${encodeURIComponent(status)}&limit=200&offset=0`);
-      renderList(listWrap, resp.items);
+      if (status === 'routed') {
+        // Collections/Routed: split table + detail, include Route column and Open Route
+        const routesResp = await api('/routes');
+        const allRoutes = routesResp.items || [];
+
+        const findRouteForShot = (shot) => {
+          const src = shot.source_path || '';
+          const dst = shot.dest_path || '';
+          const matches = allRoutes.filter(r => src.startsWith(r.source_path) && dst.startsWith(r.destination.path));
+          if (!matches.length) return null;
+          matches.sort((a,b)=> (a.priority - b.priority) || (b.source_path.length - a.source_path.length));
+          return matches[0];
+        };
+
+        const layoutPref = localStorage.getItem('sr.detailLayout') || 'right';
+        const layoutControls = document.createElement('div');
+        layoutControls.style.cssText = 'margin-bottom: 12px; display: flex; gap: 8px; align-items: center;';
+        const layoutLabel = document.createElement('span'); layoutLabel.textContent = 'Detail pane:'; layoutLabel.style.opacity = '0.8';
+        const layoutToggle = document.createElement('button'); layoutToggle.className='sr-btn'; layoutToggle.textContent = layoutPref === 'right' ? 'Right ⇄ Below' : 'Below ⇅ Right';
+        layoutControls.append(layoutLabel, layoutToggle);
+        panel.append(layoutControls);
+
+        const splitContainer = document.createElement('div');
+        const updateLayout = (layout) => {
+          if (layout === 'right') {
+            splitContainer.style.cssText = 'display: grid; grid-template-columns: 1fr 420px; gap: 16px;';
+            layoutToggle.textContent = 'Right ⇄ Below';
+          } else {
+            splitContainer.style.cssText = 'display: grid; grid-template-rows: auto 1fr; gap: 16px;';
+            layoutToggle.textContent = 'Below ⇅ Right';
+          }
+          localStorage.setItem('sr.detailLayout', layout);
+        };
+        layoutToggle.onclick = () => {
+          const current = localStorage.getItem('sr.detailLayout') || 'right';
+          updateLayout(current === 'right' ? 'below' : 'right');
+        };
+        updateLayout(layoutPref);
+
+        const tableContainer = document.createElement('div');
+        const detailPane = document.createElement('div');
+        detailPane.className = 'sr-panel';
+        detailPane.style.cssText = 'min-height: 360px;';
+        detailPane.innerHTML = '<div style="opacity:0.7;padding:24px;text-align:center;">Select a routed item to view details</div>';
+
+        const table = document.createElement('table'); table.className='sr-table';
+        const thead = document.createElement('tr'); thead.innerHTML = '<th>File</th><th>Route</th><th>Source</th><th>Destination</th><th>Routed At</th><th></th>';
+        table.append(thead);
+        for (const s of resp.items || []) {
+          const tr = document.createElement('tr');
+          const filename = (s.dest_path || s.source_path || '').split('/').pop();
+          const routedAt = s.moved_at ? new Date((typeof s.moved_at==='number'?s.moved_at*1000:s.moved_at)).toLocaleString() : '';
+          const r = findRouteForShot(s);
+          const routeLabel = r ? `#${r.priority} ${r.source_path.split('/').pop()} → ${(r.destination.name||'') || r.destination.path.split('/').pop()}` : '—';
+          tr.innerHTML = `
+            <td>${filename}</td>
+            <td>${routeLabel}</td>
+            <td style=\"font-size:11px;opacity:0.7;\">${(s.source_path||'')}</td>
+            <td style=\"font-size:11px;opacity:0.7;\">${(s.dest_path||'')}</td>
+            <td>${routedAt}</td>
+          `;
+          const td = document.createElement('td');
+          const openRoute = document.createElement('button'); openRoute.className='sr-btn'; openRoute.textContent='Open Route'; openRoute.disabled = !r; if (r) openRoute.onclick = (e)=>{ e.stopPropagation(); setView({ type:'route', key: r.id }); };
+          const viewBtn = document.createElement('button'); viewBtn.className='sr-btn'; viewBtn.textContent='View'; viewBtn.style.marginLeft='6px'; viewBtn.onclick = (e)=>{ e.stopPropagation(); tr.click(); };
+          td.append(openRoute, viewBtn); tr.append(td);
+
+          tr.style.cursor = 'pointer';
+          tr.onclick = () => {
+            table.querySelectorAll('tr').forEach(row => row.classList.remove('active'));
+            tr.classList.add('active');
+            detailPane.innerHTML = '';
+            const img = document.createElement('img'); img.src = `/api/files/${s.id}`; img.style.cssText='max-width:100%;border-radius:4px;margin-bottom:12px;cursor:pointer;';
+            img.onclick = () => {
+              const lightbox = document.createElement('div'); lightbox.className='sr-lightbox';
+              const imgLarge = document.createElement('img'); imgLarge.src = `/api/files/${s.id}`;
+              const closeBtn = document.createElement('div'); closeBtn.className='sr-lightbox-close'; closeBtn.innerHTML='&times;';
+              lightbox.append(imgLarge, closeBtn); lightbox.onclick=()=>lightbox.remove();
+              const escHandler=(e)=>{ if(e.key==='Escape'){ lightbox.remove(); document.removeEventListener('keydown', escHandler);} }; document.addEventListener('keydown', escHandler);
+              document.body.appendChild(lightbox);
+            };
+            const info = document.createElement('div'); info.style.cssText='font-size:13px;opacity:0.9;margin-bottom:12px;';
+            info.innerHTML = `
+              <div style=\"margin-bottom:4px;\"><strong>File:</strong> ${filename}</div>
+              <div style=\"margin-bottom:4px;\"><strong>Route:</strong> ${routeLabel}</div>
+              <div style=\"margin-bottom:4px;\"><strong>Source:</strong> ${s.source_path||'N/A'}</div>
+              <div style=\"margin-bottom:4px;\"><strong>Destination:</strong> ${s.dest_path||'N/A'}</div>
+              <div style=\"margin-bottom:4px;\"><strong>Routed At:</strong> ${routedAt||'N/A'}</div>
+            `;
+            const actions = document.createElement('div'); actions.style.cssText='display:flex;gap:8px;flex-wrap:wrap;';
+            if (r) { const open = document.createElement('button'); open.className='sr-btn'; open.textContent='Open Route'; open.onclick=()=>setView({ type:'route', key: r.id }); actions.append(open); }
+            const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Delete'; del.onclick= async ()=>{ if(!confirm('Delete this record?'))return; await api(`/screenshots/${s.id}`, { method:'DELETE' }); await refresh(); };
+            actions.append(del);
+            detailPane.append(img, info, actions);
+          };
+          table.append(tr);
+        }
+        tableContainer.append(table);
+        splitContainer.append(tableContainer, detailPane);
+        panel.append(splitContainer);
+        content.append(panel);
+      } else {
+        const listWrap = document.createElement('div'); listWrap.id = 'list';
+        panel.append(listWrap);
+        content.append(panel);
+        renderList(listWrap, resp.items);
+      }
     } else if (state.view.type === 'source') {
       const src = state.sources.find(s => s.path === state.view.key);
       const panel = document.createElement('div');
@@ -183,6 +325,10 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${r.priority}</td><td>${(r.destination.name || '')} ${r.destination.path}</td>`;
         const td = document.createElement('td');
+        const up = document.createElement('button'); up.className='sr-btn'; up.textContent='Up';
+        up.onclick = async () => { const np = Math.max(1, (parseInt(r.priority,10)||r.priority) - 1); await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); await refresh(); };
+        const down = document.createElement('button'); down.className='sr-btn'; down.textContent='Down'; down.style.marginLeft='6px';
+        down.onclick = async () => { const np = (parseInt(r.priority,10)||r.priority) + 1; await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); await refresh(); };
         const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
         toggle.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); await refresh(); };
         const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
@@ -194,7 +340,7 @@
           await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: src.path, dest_path: newDest, priority: pr }) });
           await refresh();
         };
-        td.append(toggle, del, clone); tr.append(td); rtable.append(tr);
+        td.append(up, down, toggle, del, clone); tr.append(td); rtable.append(tr);
       }
       const addR = document.createElement('button'); addR.className='sr-btn'; addR.textContent='Add Route';
       addR.onclick = async () => {
@@ -284,17 +430,16 @@
           <label>Target Dir: <input type="text" id="dst-target-dir" value="${dst?.target_dir || ''}" placeholder="e.g., assets/images" style="width: 200px; padding: 4px;"></label>
         </div>
       `;
-      const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
-      saveBtn.onclick = async () => {
+      const saveDstBtn = document.createElement('button'); saveDstBtn.className='sr-btn sr-btn--primary'; saveDstBtn.textContent='Save Changes';
+      saveDstBtn.onclick = async () => {
         const name = document.getElementById('dst-name').value;
         const icon = document.getElementById('dst-icon').value;
         const target_dir = document.getElementById('dst-target-dir').value;
-        await fetch(`/api/destinations`, { method:'DELETE', body: new URLSearchParams({path: dst.path}) });
-        await fetch('/api/destinations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: dst.path, name, icon, target_dir }) });
+        await fetch('/api/destinations', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: dst.path, name, icon, target_dir }) });
         await loadSidebar();
         setView({ type: 'destination', key: dst.path });
       };
-      editForm.appendChild(saveBtn);
+      editForm.appendChild(saveDstBtn);
 
       const routesPanel = document.createElement('div'); routesPanel.style.marginTop='12px';
       const rh = document.createElement('h3'); rh.textContent = 'Inbound Routes';
@@ -306,6 +451,10 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${r.priority}</td><td>${r.source_path}</td>`;
         const td = document.createElement('td');
+        const up = document.createElement('button'); up.className='sr-btn'; up.textContent='Up';
+        up.onclick = async () => { const np = Math.max(1, (parseInt(r.priority,10)||r.priority) - 1); await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); await refresh(); };
+        const down = document.createElement('button'); down.className='sr-btn'; down.textContent='Down'; down.style.marginLeft='6px';
+        down.onclick = async () => { const np = (parseInt(r.priority,10)||r.priority) + 1; await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); await refresh(); };
         const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
         toggle.onclick = async () => { await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); await refresh(); };
         const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
@@ -317,7 +466,7 @@
           await fetch('/api/routes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ source_path: newSrc, dest_path: dst.path, priority: pr }) });
           await refresh();
         };
-        td.append(toggle, del, clone); tr.append(td); rtable.append(tr);
+        td.append(up, down, toggle, del, clone); tr.append(td); rtable.append(tr);
       }
       const addR = document.createElement('button'); addR.className='sr-btn'; addR.textContent='Add Route from Source';
       addR.onclick = async () => {
@@ -351,20 +500,24 @@
         tr.innerHTML = `<td>${r.priority}</td><td>${r.source_path}</td><td>${(r.destination.name||'')} ${r.destination.path}</td>`;
         tr.onclick = () => setView({ type: 'route', key: r.id });
         const td = document.createElement('td');
+        const up = document.createElement('button'); up.className='sr-btn'; up.textContent='Up';
+        up.onclick= async (e)=>{ e.stopPropagation(); const np=Math.max(1,(parseInt(r.priority,10)||r.priority)-1); await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); setView({ type: 'routes' }); };
+        const down = document.createElement('button'); down.className='sr-btn'; down.textContent='Down'; down.style.marginLeft='6px';
+        down.onclick= async (e)=>{ e.stopPropagation(); const np=(parseInt(r.priority,10)||r.priority)+1; await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ priority: np }) }); setView({ type: 'routes' }); };
         const toggle = document.createElement('button'); toggle.className='sr-btn'; toggle.textContent = r.active ? 'Disable' : 'Enable';
         toggle.onclick= async (e)=>{ e.stopPropagation(); await fetch(`/api/routes/${r.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ active: !r.active }) }); setView({ type: 'routes' }); };
         const clone = document.createElement('button'); clone.className='sr-btn'; clone.textContent='Clone'; clone.style.marginLeft='6px';
         clone.onclick= async (e)=>{ e.stopPropagation(); const newSrc=prompt('Clone source path:', r.source_path); if(!newSrc) return; const newDst=prompt('Clone destination path:', r.destination.path); if(!newDst) return; const pr=parseInt(prompt('Priority? (1 is highest)', String(r.priority))||String(r.priority),10); await fetch('/api/routes',{method:'POST',headers:{'Content-Type':'application/json'},body: JSON.stringify({ source_path:newSrc, dest_path:newDst, priority:pr })}); setView({ type:'routes' }); };
         const del = document.createElement('button'); del.className='sr-btn'; del.textContent='Remove'; del.style.marginLeft='6px';
         del.onclick= async (e)=>{ e.stopPropagation(); await fetch(`/api/routes/${r.id}`, { method:'DELETE' }); setView({ type: 'routes' }); };
-        td.append(toggle, clone, del); tr.append(td); table.append(tr);
+        td.append(up, down, toggle, clone, del); tr.append(td); table.append(tr);
       }
       const controls = document.createElement('div'); controls.style.marginBottom='8px'; controls.append(add);
       panel.append(h, controls, table); content.append(panel);
     } else if (state.view.type === 'route') {
       // Route detail view with tabs
-      const rresp = await api('/routes');
-      const route = (rresp.items || []).find(r => r.id === state.view.key);
+      const rresp = await api(`/routes/${state.view.key}`);
+      const route = rresp.route;
       if (!route) {
         content.innerHTML = '<div class="sr-panel">Route not found</div>';
         return;
@@ -431,11 +584,12 @@
       const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
       saveBtn.onclick = async () => {
         const enabled = document.getElementById('route-enabled').checked;
-        const priority = parseInt(document.getElementById('route-priority').value, 10);
+        const priority = parseInt(document.getElementById('route-priority').value, 10) || route.priority;
+        const name = (document.getElementById('route-name').value || '').trim() || route.name || '';
         try {
           await api(`/routes/${route.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ active: enabled, priority: priority })
+            body: JSON.stringify({ active: enabled, priority, name })
           });
           alert('Route updated successfully!');
           await refresh();
@@ -468,9 +622,9 @@
       // === Routed Items Tab ===
       const itemsPanel = document.createElement('div');
 
-      // Fetch screenshots routed to this destination
-      const ssResp = await api(`/screenshots?status=routed&limit=200&offset=0`);
-      const matchedShots = (ssResp.items || []).filter(s => s.dest_path && s.dest_path.startsWith(route.destination.path));
+      // Fetch screenshots routed via this specific route
+      const ssResp = await api(`/routes/${route.id}/items?limit=200&offset=0`);
+      const matchedShots = ssResp.items || [];
 
       if (matchedShots.length === 0) {
         itemsPanel.innerHTML = '<div style="opacity: 0.7;">No screenshots routed yet.</div>';

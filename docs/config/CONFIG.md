@@ -8,15 +8,17 @@ Path: `~/.config/shotrouter/config.toml`
 
 ```toml
 # Folders ShotRouter watches for new screenshots.
+# Preferred format (richer and explicit):
+[[sources.items]]
+path = "~/Pictures/Screenshots"
+enabled = true
+debounce_ms = 400
+name = "My Screens"
+icon = "🖼️"
+
+# Legacy minimal format (still accepted on read):
 [sources]
-paths = [
-  "~/Pictures/Screenshots",
-  # Windows examples:
-  # "%USERPROFILE%/Pictures/Screenshots",
-  # "%OneDrive%/Pictures/Screenshots",
-  # macOS fallback:
-  # "~/Desktop",
-]
+paths = ["~/Pictures/Screenshots"]
 
 # Debounce time before claiming a file (ms)
 debounce_ms = 400
@@ -76,6 +78,12 @@ Precedence: env vars → repo TOML → global TOML → defaults.
 - `SHOTROUTER_CONFIG` — custom global config path
 - `SHOTROUTER_API_HOST`, `SHOTROUTER_API_PORT`
 - `SHOTROUTER_POLICY_*` to override policy keys (e.g., `SHOTROUTER_POLICY_HIGH=quarantine`)
+
+### Source format precedence
+
+- When both `[[sources.items]]` and `[sources].paths` exist, the `[[sources.items]]` entries take precedence; legacy `paths` are ignored to prevent duplication.
+- Paths are canonicalized on write (expanduser + resolve). On Windows, paths are case-normalized.
+- The app writes config atomically (tmp + replace) and uses a lightweight file lock to avoid tearing.
 
 ## Defaults
 

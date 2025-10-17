@@ -65,7 +65,12 @@ Response `200`:
 
 `GET /settings` → effective configuration
 
-`POST /settings` → update global settings (sources, debounce, inbox)
+`POST /settings` → legacy update (no-op in current builds; kept for back-compat)
+
+`PATCH /settings` → persist global settings (debounce_ms, inbox_dir)
+
+Response notes:
+- `debounce_ms` changes apply after daemon restart; running watchers are unaffected.
 
 ## Compliance & Fleet Extensions
 

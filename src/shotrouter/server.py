@@ -9,7 +9,7 @@ import uvicorn
 from .state import get_app_state
 from .api import routes, ws
 from . import db
-from .config import load_config, get_default_source_candidates
+from .config import load_config, get_default_source_candidates, canonicalize_path
 from .watcher import manager as watch_manager
 from .sources import registry as source_registry, Source
 
@@ -44,6 +44,16 @@ def create_app() -> FastAPI:
             return response
 
     app.add_middleware(NoCacheAssetsMiddleware)
+
+    # Hydrate in-memory source registry from config (without starting watchers)
+    try:
+        cfg = load_config()
+        for src in cfg.sources:
+            cpath = canonicalize_path(src.path)
+            source_registry.add(Source(path=cpath, enabled=src.enabled, debounce_ms=src.debounce_ms, name=src.name, icon=src.icon))
+    except Exception:
+        import logging
+        logging.getLogger("shotrouter").exception("Failed to hydrate sources from config")
 
     # API routes & WebSocket
     app.include_router(routes.router, prefix="/api")

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -7,6 +7,8 @@ class Source:
     path: str
     enabled: bool = True
     debounce_ms: int = 400
+    name: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class SourceRegistry:
@@ -27,4 +29,3 @@ class SourceRegistry:
 
 
 registry = SourceRegistry()
-
