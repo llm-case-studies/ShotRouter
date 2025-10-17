@@ -340,7 +340,7 @@
       const controls = document.createElement('div'); controls.style.marginBottom='8px'; controls.append(add);
       panel.append(h, controls, table); content.append(panel);
     } else if (state.view.type === 'route') {
-      // Route detail view - shows screenshots routed via this route
+      // Route detail view with tabs
       const rresp = await api('/routes');
       const route = (rresp.items || []).find(r => r.id === state.view.key);
       if (!route) {
@@ -349,40 +349,113 @@
       }
 
       const panel = document.createElement('div'); panel.className='sr-panel';
-      const h = document.createElement('h2'); h.textContent = `Route #${route.priority}`;
+      const h = document.createElement('h2'); h.textContent = `Route: ${route.source_path.split('/').pop()} → ${route.destination.name || route.destination.path.split('/').pop()}`;
 
-      // Route details
-      const details = document.createElement('div'); details.style.marginBottom = '16px';
-      details.innerHTML = `
-        <div><strong>Source:</strong> ${route.source_path}</div>
-        <div><strong>Destination:</strong> ${route.destination.name || ''} ${route.destination.path}</div>
-        <div><strong>Priority:</strong> ${route.priority}</div>
-        <div><strong>Status:</strong> ${route.active ? '🟢 Active' : '⚪ Inactive'}</div>
+      // Tab navigation
+      const tabs = document.createElement('div'); tabs.className = 'sr-tabs';
+      const configTab = document.createElement('button'); configTab.className = 'sr-tab active'; configTab.textContent = 'Configuration';
+      const itemsTab = document.createElement('button'); itemsTab.className = 'sr-tab'; itemsTab.textContent = 'Routed Items';
+      tabs.append(configTab, itemsTab);
+
+      // Tab contents
+      const configContent = document.createElement('div'); configContent.className = 'sr-tab-content active';
+      const itemsContent = document.createElement('div'); itemsContent.className = 'sr-tab-content';
+
+      // Tab switching
+      configTab.onclick = () => {
+        configTab.classList.add('active'); itemsTab.classList.remove('active');
+        configContent.classList.add('active'); itemsContent.classList.remove('active');
+      };
+      itemsTab.onclick = () => {
+        itemsTab.classList.add('active'); configTab.classList.remove('active');
+        itemsContent.classList.add('active'); configContent.classList.remove('active');
+      };
+
+      // === Configuration Tab ===
+      const configForm = document.createElement('div');
+      configForm.innerHTML = `
+        <div style="margin-bottom: 12px;">
+          <strong>Source:</strong> ${route.source_path}
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong>Destination:</strong> ${route.destination.path}
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label>
+            <input type="checkbox" id="route-enabled" ${route.active ? 'checked' : ''}>
+            Enabled
+          </label>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label>Route Name: <input type="text" id="route-name" value="" placeholder="e.g., Dev Screenshots" style="width: 250px; padding: 4px;"></label>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label>Priority: <input type="number" id="route-priority" value="${route.priority}" min="1" style="width: 80px; padding: 4px;"></label>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong>Activation Rules:</strong>
+          <div style="margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+            <div style="opacity: 0.7; font-size: 12px;">Coming soon: n-shots, time-based, folder-exists</div>
+          </div>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong>Actions:</strong>
+          <div style="margin-top: 6px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+            <div style="opacity: 0.7; font-size: 12px;">Coming soon: compress, calculate_hash, etc.</div>
+          </div>
+        </div>
       `;
 
-      // Screenshots routed via this route
-      const screenshotsPanel = document.createElement('div'); screenshotsPanel.style.marginTop='20px';
-      const sh = document.createElement('h3'); sh.textContent = 'Screenshots Routed';
-      screenshotsPanel.append(sh);
+      const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
+      saveBtn.onclick = async () => {
+        const enabled = document.getElementById('route-enabled').checked;
+        const priority = parseInt(document.getElementById('route-priority').value, 10);
+        // TODO: API endpoint to update route
+        alert('Save functionality coming soon - need PATCH /api/routes/{id} endpoint');
+      };
 
-      // Fetch screenshots where routed_via matches this route (we'd need to track this in DB)
-      // For now, show screenshots routed to this destination
-      const ssResp = await api(`/screenshots?status=routed&limit=50&offset=0`);
+      const deleteBtn = document.createElement('button'); deleteBtn.className='sr-btn'; deleteBtn.textContent='Delete Route'; deleteBtn.style.marginLeft='8px';
+      deleteBtn.onclick = async () => {
+        if (!confirm('Delete this route?')) return;
+        await fetch(`/api/routes/${route.id}`, { method:'DELETE' });
+        setView({ type: 'routes' });
+      };
+
+      configForm.appendChild(saveBtn);
+      configForm.appendChild(deleteBtn);
+      configContent.appendChild(configForm);
+
+      // === Routed Items Tab ===
+      const itemsPanel = document.createElement('div');
+
+      // Fetch screenshots routed to this destination
+      const ssResp = await api(`/screenshots?status=routed&limit=200&offset=0`);
       const matchedShots = (ssResp.items || []).filter(s => s.dest_path && s.dest_path.startsWith(route.destination.path));
 
       if (matchedShots.length === 0) {
-        screenshotsPanel.append(document.createTextNode('No screenshots routed via this route yet.'));
+        itemsPanel.innerHTML = '<div style="opacity: 0.7;">No screenshots routed yet.</div>';
       } else {
         const table = document.createElement('table'); table.className = 'sr-table';
-        const thead = document.createElement('tr'); thead.innerHTML = '<th>File</th><th>Routed At</th><th></th>';
+        const thead = document.createElement('tr');
+        thead.innerHTML = '<th>ID</th><th>File</th><th>Source</th><th>Destination</th><th>Routed At</th><th>Size</th><th></th>';
         table.append(thead);
+
         for (const s of matchedShots) {
           const tr = document.createElement('tr');
           const filename = (s.dest_path || s.source_path || '').split('/').pop();
           const routedAt = s.moved_at ? new Date(s.moved_at * 1000).toLocaleString() : 'N/A';
-          tr.innerHTML = `<td>${filename}</td><td>${routedAt}</td>`;
-          const td = document.createElement('td');
+          const size = s.size ? Math.round(s.size / 1024) + ' KB' : 'N/A';
 
+          tr.innerHTML = `
+            <td style="font-family: monospace; font-size: 11px;">${s.id}</td>
+            <td>${filename}</td>
+            <td style="font-size: 11px; opacity: 0.7;">${(s.source_path || '').split('/').slice(-2).join('/')}</td>
+            <td style="font-size: 11px; opacity: 0.7;">${(s.dest_path || '').split('/').slice(-2).join('/')}</td>
+            <td>${routedAt}</td>
+            <td>${size}</td>
+          `;
+
+          const td = document.createElement('td');
           const viewBtn = document.createElement('button'); viewBtn.className='sr-btn'; viewBtn.textContent='View';
           viewBtn.onclick = () => {
             const lightbox = document.createElement('div'); lightbox.className = 'sr-lightbox';
@@ -395,13 +468,14 @@
             document.body.appendChild(lightbox);
           };
 
-          // Future: Add "Undo/Reroute" button here
           td.append(viewBtn); tr.append(td); table.append(tr);
         }
-        screenshotsPanel.append(table);
+        itemsPanel.append(table);
       }
 
-      panel.append(h, details, screenshotsPanel);
+      itemsContent.appendChild(itemsPanel);
+
+      panel.append(h, tabs, configContent, itemsContent);
       content.append(panel);
     }
   }
