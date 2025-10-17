@@ -443,9 +443,41 @@
       if (matchedShots.length === 0) {
         itemsPanel.innerHTML = '<div style="opacity: 0.7;">No screenshots routed yet.</div>';
       } else {
+        // Layout toggle controls
+        const layoutPref = localStorage.getItem('sr.detailLayout') || 'right';
+        const layoutControls = document.createElement('div');
+        layoutControls.style.cssText = 'margin-bottom: 12px; display: flex; gap: 8px; align-items: center;';
+
+        const layoutLabel = document.createElement('span');
+        layoutLabel.textContent = 'Detail pane:';
+        layoutLabel.style.opacity = '0.8';
+
+        const layoutToggle = document.createElement('button');
+        layoutToggle.className = 'sr-btn';
+        layoutToggle.textContent = layoutPref === 'right' ? 'Right ⇄ Below' : 'Below ⇅ Right';
+
+        layoutControls.append(layoutLabel, layoutToggle);
+        itemsPanel.appendChild(layoutControls);
+
         // Create split layout: table + detail pane
         const splitContainer = document.createElement('div');
-        splitContainer.style.cssText = 'display: grid; grid-template-columns: 1fr 400px; gap: 16px;';
+        const updateLayout = (layout) => {
+          if (layout === 'right') {
+            splitContainer.style.cssText = 'display: grid; grid-template-columns: 1fr 400px; gap: 16px;';
+            layoutToggle.textContent = 'Right ⇄ Below';
+          } else {
+            splitContainer.style.cssText = 'display: grid; grid-template-rows: auto 1fr; gap: 16px;';
+            layoutToggle.textContent = 'Below ⇅ Right';
+          }
+          localStorage.setItem('sr.detailLayout', layout);
+        };
+
+        layoutToggle.onclick = () => {
+          const current = localStorage.getItem('sr.detailLayout') || 'right';
+          updateLayout(current === 'right' ? 'below' : 'right');
+        };
+
+        updateLayout(layoutPref);
 
         const tableContainer = document.createElement('div');
         const detailPane = document.createElement('div');

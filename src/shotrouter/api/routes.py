@@ -198,7 +198,9 @@ def list_routes(source_path: Optional[str] = None, dest_path: Optional[str] = No
     out = []
     for r in routes:
         d = dsts.get(r["dest_path"]) or {"path": r["dest_path"], "target_dir": "assets/images"}
-        out.append({**r, "destination": {"path": d["path"], "target_dir": d.get("target_dir", "assets/images"), "name": d.get("name")}})
+        # Convert active from int to bool for JSON consistency
+        route_data = {**r, "active": bool(r.get("active", 1))}
+        out.append({**route_data, "destination": {"path": d["path"], "target_dir": d.get("target_dir", "assets/images"), "name": d.get("name")}})
     return {"items": out}
 
 
