@@ -146,12 +146,34 @@
       panel.className = 'sr-panel';
       const h = document.createElement('h2');
       h.textContent = (status === 'inbox' ? 'Inbox (unrouted)' : status.charAt(0).toUpperCase() + status.slice(1));
-      const listWrap = document.createElement('div');
-      listWrap.id = 'list';
-      panel.append(h, listWrap);
-      content.append(panel);
+      panel.append(h);
       const resp = await api(`/screenshots?status=${encodeURIComponent(status)}&limit=200&offset=0`);
-      renderList(listWrap, resp.items);
+      if (status === 'routed') {
+        const table = document.createElement('table'); table.className='sr-table';
+        const thead = document.createElement('tr'); thead.innerHTML = '<th>File</th><th>Source</th><th>Destination</th><th>Routed At</th><th></th>';
+        table.append(thead);
+        for (const s of resp.items || []) {
+          const tr = document.createElement('tr');
+          const filename = (s.dest_path || s.source_path || '').split('/').pop();
+          const routedAt = s.moved_at ? new Date((typeof s.moved_at==='number'?s.moved_at*1000:s.moved_at)).toLocaleString() : '';
+          tr.innerHTML = `<td>${filename}</td><td style="font-size:11px;opacity:0.7;">${(s.source_path||'')}</td><td style="font-size:11px;opacity:0.7;">${(s.dest_path||'')}</td><td>${routedAt}</td>`;
+          const td = document.createElement('td');
+          const view = document.createElement('button'); view.className='sr-btn'; view.textContent='View';
+          view.onclick = () => {
+            const prev = document.createElement('div'); prev.className='sr-preview';
+            const img = document.createElement('img'); img.src = `/api/files/${s.id}`; prev.append(img);
+            tr.after(prev);
+          };
+          td.append(view); tr.append(td); table.append(tr);
+        }
+        panel.append(table);
+        content.append(panel);
+      } else {
+        const listWrap = document.createElement('div'); listWrap.id = 'list';
+        panel.append(listWrap);
+        content.append(panel);
+        renderList(listWrap, resp.items);
+      }
     } else if (state.view.type === 'source') {
       const src = state.sources.find(s => s.path === state.view.key);
       const panel = document.createElement('div');
@@ -284,17 +306,16 @@
           <label>Target Dir: <input type="text" id="dst-target-dir" value="${dst?.target_dir || ''}" placeholder="e.g., assets/images" style="width: 200px; padding: 4px;"></label>
         </div>
       `;
-      const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
-      saveBtn.onclick = async () => {
+      const saveDstBtn = document.createElement('button'); saveDstBtn.className='sr-btn sr-btn--primary'; saveDstBtn.textContent='Save Changes';
+      saveDstBtn.onclick = async () => {
         const name = document.getElementById('dst-name').value;
         const icon = document.getElementById('dst-icon').value;
         const target_dir = document.getElementById('dst-target-dir').value;
-        await fetch(`/api/destinations`, { method:'DELETE', body: new URLSearchParams({path: dst.path}) });
-        await fetch('/api/destinations', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: dst.path, name, icon, target_dir }) });
+        await fetch('/api/destinations', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: dst.path, name, icon, target_dir }) });
         await loadSidebar();
         setView({ type: 'destination', key: dst.path });
       };
-      editForm.appendChild(saveBtn);
+      editForm.appendChild(saveDstBtn);
 
       const routesPanel = document.createElement('div'); routesPanel.style.marginTop='12px';
       const rh = document.createElement('h3'); rh.textContent = 'Inbound Routes';
@@ -363,8 +384,8 @@
       panel.append(h, controls, table); content.append(panel);
     } else if (state.view.type === 'route') {
       // Route detail view with tabs
-      const rresp = await api('/routes');
-      const route = (rresp.items || []).find(r => r.id === state.view.key);
+      const rresp = await api(`/routes/${state.view.key}`);
+      const route = rresp.route;
       if (!route) {
         content.innerHTML = '<div class="sr-panel">Route not found</div>';
         return;
@@ -431,11 +452,12 @@
       const saveBtn = document.createElement('button'); saveBtn.className='sr-btn sr-btn--primary'; saveBtn.textContent='Save Changes';
       saveBtn.onclick = async () => {
         const enabled = document.getElementById('route-enabled').checked;
-        const priority = parseInt(document.getElementById('route-priority').value, 10);
+        const priority = parseInt(document.getElementById('route-priority').value, 10) || route.priority;
+        const name = (document.getElementById('route-name').value || '').trim() || route.name || '';
         try {
           await api(`/routes/${route.id}`, {
             method: 'PATCH',
-            body: JSON.stringify({ active: enabled, priority: priority })
+            body: JSON.stringify({ active: enabled, priority, name })
           });
           alert('Route updated successfully!');
           await refresh();
@@ -468,9 +490,9 @@
       // === Routed Items Tab ===
       const itemsPanel = document.createElement('div');
 
-      // Fetch screenshots routed to this destination
-      const ssResp = await api(`/screenshots?status=routed&limit=200&offset=0`);
-      const matchedShots = (ssResp.items || []).filter(s => s.dest_path && s.dest_path.startsWith(route.destination.path));
+      // Fetch screenshots routed via this specific route
+      const ssResp = await api(`/routes/${route.id}/items?limit=200&offset=0`);
+      const matchedShots = ssResp.items || [];
 
       if (matchedShots.length === 0) {
         itemsPanel.innerHTML = '<div style="opacity: 0.7;">No screenshots routed yet.</div>';

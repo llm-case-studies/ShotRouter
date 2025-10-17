@@ -69,11 +69,17 @@ class Database:
                 dest_path TEXT NOT NULL,
                 priority INTEGER NOT NULL,
                 active INTEGER NOT NULL DEFAULT 1,
+                name TEXT,
                 created_at REAL
             );
             """
         )
         self._exec("CREATE INDEX IF NOT EXISTS idx_route_source ON route(source_path, priority);")
+        # Best-effort add missing columns
+        try:
+            self._exec("ALTER TABLE route ADD COLUMN name TEXT")
+        except Exception:
+            pass
 
     def add_screenshot(self, source_path: str, size: int) -> Dict[str, Any]:
         sid = f"sr_{uuid.uuid4().hex[:8]}"
@@ -143,32 +149,47 @@ class Database:
         rows = self._query("SELECT id, path, target_dir, name, icon, name_format FROM destination WHERE path=?", (path,))
         return dict(rows[0]) if rows else None
 
+    def update_destination(self, path: str, *, name: Optional[str] = None, icon: Optional[str] = None, target_dir: Optional[str] = None) -> bool:
+        fields = []
+        params: List[Any] = []
+        if name is not None:
+            fields.append("name=?"); params.append(name)
+        if icon is not None:
+            fields.append("icon=?"); params.append(icon)
+        if target_dir is not None:
+            fields.append("target_dir=?"); params.append(target_dir)
+        if not fields:
+            return False
+        params.append(path)
+        cur = self._exec(f"UPDATE destination SET {', '.join(fields)} WHERE path=?", tuple(params))
+        return cur.rowcount > 0
+
     # Routes
-    def add_route(self, source_path: str, dest_path: str, priority: int = 1, active: bool = True) -> Dict[str, Any]:
+    def add_route(self, source_path: str, dest_path: str, priority: int = 1, active: bool = True, name: Optional[str] = None) -> Dict[str, Any]:
         rid = f"rt_{uuid.uuid4().hex[:8]}"
         now = time.time()
         self._exec(
-            "INSERT INTO route (id, source_path, dest_path, priority, active, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (rid, source_path, dest_path, priority, 1 if active else 0, now),
+            "INSERT INTO route (id, source_path, dest_path, priority, active, name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (rid, source_path, dest_path, priority, 1 if active else 0, name, now),
         )
-        return {"id": rid, "source_path": source_path, "dest_path": dest_path, "priority": priority, "active": active}
+        return {"id": rid, "source_path": source_path, "dest_path": dest_path, "priority": priority, "active": active, "name": name}
 
     def list_routes(self, source_path: Optional[str] = None) -> List[Dict[str, Any]]:
         if source_path:
-            rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route WHERE source_path=? ORDER BY priority ASC, created_at ASC", (source_path,))
+            rows = self._query("SELECT id, source_path, dest_path, priority, active, name FROM route WHERE source_path=? ORDER BY priority ASC, created_at ASC", (source_path,))
         else:
-            rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route ORDER BY source_path, priority ASC")
+            rows = self._query("SELECT id, source_path, dest_path, priority, active, name FROM route ORDER BY source_path, priority ASC")
         return [dict(r) for r in rows]
 
-    def update_route(self, rid: str, priority: Optional[int] = None, active: Optional[bool] = None) -> bool:
+    def update_route(self, rid: str, priority: Optional[int] = None, active: Optional[bool] = None, name: Optional[str] = None) -> bool:
         updates = []
-        params = []
+        params: List[Any] = []
         if priority is not None:
-            updates.append("priority = ?")
-            params.append(priority)
+            updates.append("priority = ?"); params.append(priority)
         if active is not None:
-            updates.append("active = ?")
-            params.append(1 if active else 0)
+            updates.append("active = ?"); params.append(1 if active else 0)
+        if name is not None:
+            updates.append("name = ?"); params.append(name)
         if not updates:
             return False
         params.append(rid)

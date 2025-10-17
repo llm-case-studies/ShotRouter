@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from fastapi import Request
 
 from ..state import get_app_state
 from ..events import broadcast
@@ -181,12 +182,28 @@ def remove_destination(path: str) -> Dict[str, Any]:
     return {"status": "ok"}
 
 
+class DestinationUpdateBody(BaseModel):
+    path: str
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    target_dir: Optional[str] = None
+
+
+@router.patch("/destinations")
+def update_destination(body: DestinationUpdateBody) -> Dict[str, Any]:
+    ok = db.get().update_destination(body.path, name=body.name, icon=body.icon, target_dir=body.target_dir)
+    if not ok:
+        raise HTTPException(status_code=404, detail="not found or no changes")
+    return {"status": "ok"}
+
+
 # Routes
 class RouteAddBody(BaseModel):
     source_path: str
     dest_path: str
     priority: int = 1
     active: bool = True
+    name: Optional[str] = None
 
 
 @router.get("/routes")
@@ -210,7 +227,7 @@ def add_route(body: RouteAddBody) -> Dict[str, Any]:
     # Ensure destination exists in DB for UI discoverability
     if not db.get().get_destination(body.dest_path):
         db.get().add_destination(path=body.dest_path, target_dir="")
-    rec = db.get().add_route(source_path=body.source_path, dest_path=body.dest_path, priority=body.priority, active=body.active)
+    rec = db.get().add_route(source_path=body.source_path, dest_path=body.dest_path, priority=body.priority, active=body.active, name=body.name)
     return {"route": rec}
 
 
@@ -246,16 +263,30 @@ def get_file(sid: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="file not found on disk")
 
 
-class RouteUpdateBody(BaseModel):
-    priority: Optional[int] = None
-    active: Optional[bool] = None
-
-
 @router.patch("/routes/{rid}")
-def update_route(rid: str, body: RouteUpdateBody) -> Dict[str, Any]:
-    ok = db.get().update_route(rid, priority=body.priority, active=body.active)
+async def update_route(rid: str, request: Request) -> Dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    priority = payload.get("priority")
+    active = payload.get("active")
+    name = payload.get("name")
+    # Coerce types if strings
+    if isinstance(priority, str):
+        try:
+            priority = int(priority)
+        except Exception:
+            priority = None
+    if isinstance(active, str):
+        active = active.lower() in ("1", "true", "yes", "on")
+    if name is not None and not isinstance(name, str):
+        name = str(name)
+    if priority is None and active is None and name is None:
+        raise HTTPException(status_code=422, detail="No changes provided")
+    ok = db.get().update_route(rid, priority=priority, active=active, name=name)
     if not ok:
-        raise HTTPException(status_code=404, detail="not found")
+        raise HTTPException(status_code=404, detail="not found or no changes")
     return {"status": "ok"}
 
 
