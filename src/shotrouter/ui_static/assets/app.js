@@ -1,5 +1,13 @@
 (function () {
-  const api = (path, opts = {}) => fetch(`/api${path}`, opts).then(r => r.json());
+  const api = (path, opts = {}) => {
+    // Auto-set Content-Type for requests with a body
+    if (opts.body && !opts.headers) {
+      opts.headers = { 'Content-Type': 'application/json' };
+    } else if (opts.body && opts.headers && !opts.headers['Content-Type']) {
+      opts.headers['Content-Type'] = 'application/json';
+    }
+    return fetch(`/api${path}`, opts).then(r => r.json());
+  };
   const state = {
     view: { type: 'collection', key: 'inbox' }, // 'collection' | 'source' | 'destination' | 'sources' | 'destinations'
     sources: [],
