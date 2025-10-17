@@ -34,6 +34,7 @@ body { margin: 0; }
 .sr-table { width: 100%; border-collapse: collapse; }
 .sr-table th, .sr-table td { text-align: left; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
 .sr-table th { opacity: 0.9; }
+.sr-table tr.active { background: rgba(255,255,255,0.08); }
 
 /* Tabs */
 .sr-tabs {
