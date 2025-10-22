@@ -1,15 +1,21 @@
+from pathlib import Path
 from fastapi.testclient import TestClient
 from shotrouter.server import create_app
+from shotrouter.state import reset_app_state
 
 
 def new_client():
+    reset_app_state()  # Reset state between tests
     return TestClient(create_app())
 
 
-def test_route_requires_repo_or_armed():
+def test_route_requires_repo_or_armed(tmp_path: Path):
     c = new_client()
+    # Create temp source file
+    src_file = tmp_path / "a.png"
+    src_file.write_bytes(b"data")
     # simulate one new item
-    r = c.post('/api/dev/simulate_new', json={'source_path': '/src/a.png', 'size': 1})
+    r = c.post('/api/dev/simulate_new', json={'source_path': str(src_file), 'size': 1})
     sid = r.json()['id']
     r = c.post('/api/route', json={'ids': [sid]})
     assert r.status_code == 422
@@ -33,15 +39,19 @@ def test_list_pagination_and_status_filter():
     assert len(r2.json()['items']) == 2
 
 
-def test_routing_uses_armed_defaults():
+def test_routing_uses_armed_defaults(tmp_path: Path):
     c = new_client()
-    c.post('/api/arm', json={'repo_path': '/repo', 'target_dir': 'assets/images'})
-    r = c.post('/api/dev/simulate_new', json={'source_path': '/src/x.png', 'size': 1})
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    src_file = tmp_path / "x.png"
+    src_file.write_bytes(b"data")
+    c.post('/api/arm', json={'repo_path': str(repo_path), 'target_dir': 'assets/images'})
+    r = c.post('/api/dev/simulate_new', json={'source_path': str(src_file), 'size': 1})
     sid = r.json()['id']
     rr = c.post('/api/route', json={'ids': [sid]})
     assert rr.status_code == 200
     dest = rr.json()['routed'][0]['dest_path']
-    assert dest.startswith('/repo/assets/images/')
+    assert dest.startswith(str(repo_path / 'assets/images'))
 
 
 def test_quarantine_flow():

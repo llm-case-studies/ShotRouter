@@ -1,6 +1,6 @@
 # ShotRouter
 
-System‑wide ShotManager that watches OS screenshot folders and routes new screenshots into the right repo or doc store — renamed, audited, and easy to find.
+System‑wide screenshot router that watches OS screenshot folders and routes new screenshots into the right repo or doc store — renamed, audited, and easy to find.
 
 - Native Print Screen flow; no overlays changed.
 - UI‑first: local SPA on 127.0.0.1 for Inbox → Approve/Quarantine → Route. CLI is optional for devs.
@@ -8,7 +8,26 @@ System‑wide ShotManager that watches OS screenshot folders and routes new scre
 - Compliance‑ready: pluggable analyzers (local LLMs, heuristics) and policy gates.
 - Cross‑platform plan: Linux, Windows, macOS. Local‑only by default; no uploads.
 
-This repository is a complete design package (docs only) to implement ShotRouter quickly.
+## Quick Start
+
+```bash
+# Install
+pip install -e .
+
+# Run manually (test it out)
+shotrouterd
+
+# Open web UI
+xdg-open http://127.0.0.1:8767
+
+# Install as auto-starting service (systemd)
+./install-service.sh
+
+# Or install as desktop autostart entry
+./install-autostart.sh
+```
+
+See [docs/setup/DAEMON_SETUP.md](docs/setup/DAEMON_SETUP.md) for detailed setup instructions.
 
 ## Contents
 
