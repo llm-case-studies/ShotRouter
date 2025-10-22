@@ -198,7 +198,7 @@ class Database:
         return cur.rowcount > 0
 
     def get_route(self, rid: str) -> Optional[Dict[str, Any]]:
-        rows = self._query("SELECT id, source_path, dest_path, priority, active FROM route WHERE id=?", (rid,))
+        rows = self._query("SELECT id, source_path, dest_path, priority, active, name FROM route WHERE id=?", (rid,))
         return dict(rows[0]) if rows else None
 
     def list_screenshots_for_route(self, source_prefix: str, dest_prefix: str, limit: int = 200, offset: int = 0) -> List[Dict[str, Any]]:

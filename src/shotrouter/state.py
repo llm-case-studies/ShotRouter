@@ -20,3 +20,9 @@ def get_app_state() -> AppState:
     if _app_state is None:
         _app_state = AppState()
     return _app_state
+
+
+def reset_app_state() -> None:
+    """Reset app state (mainly for tests)"""
+    global _app_state
+    _app_state = None
